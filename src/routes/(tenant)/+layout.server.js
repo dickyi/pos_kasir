@@ -27,6 +27,15 @@ export async function load({ cookies, url }) {
 
     // Return user data untuk digunakan di layout dan halaman
     return {
-        user: user
+        user: {
+            id: user.id,
+            email: user.email,
+            nama: user.nama,
+            role: user.role,
+            pelanggan_id: user.pelanggan_id,
+            nama_bisnis: user.nama_bisnis,
+            kode_pelanggan: user.kode_pelanggan,
+            status: user.status
+        }
     };
 }

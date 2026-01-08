@@ -1,5 +1,10 @@
 <script>
     import { enhance } from '$app/forms';
+    import { 
+        Store, Building2, User, MapPin, Mail, Phone, Lock, Eye, EyeOff, 
+        ArrowRight, ArrowLeft, Loader2, CheckCircle2, Circle, Sparkles,
+        ChevronDown, Check, X, Shield
+    } from 'lucide-svelte';
     
     // Form state
     export let form;
@@ -27,52 +32,39 @@
 
     // Jenis usaha options
     const jenisUsahaOptions = [
-        'Toko Kelontong/Sembako',
-        'Warung Makan/Restoran',
-        'Minimarket',
-        'Apotek/Toko Obat',
-        'Toko Pakaian/Fashion',
-        'Toko Elektronik',
-        'Toko Bangunan',
-        'Salon/Barbershop',
-        'Bengkel',
-        'Toko Buku/ATK',
-        'Cafe/Kedai Kopi',
-        'Lainnya'
+        { value: 'toko_kelontong', label: 'Toko Kelontong/Sembako', icon: '🏪' },
+        { value: 'warung_makan', label: 'Warung Makan/Restoran', icon: '🍽️' },
+        { value: 'minimarket', label: 'Minimarket', icon: '🛒' },
+        { value: 'apotek', label: 'Apotek/Toko Obat', icon: '💊' },
+        { value: 'fashion', label: 'Toko Pakaian/Fashion', icon: '👕' },
+        { value: 'elektronik', label: 'Toko Elektronik', icon: '📱' },
+        { value: 'bangunan', label: 'Toko Bangunan', icon: '🔨' },
+        { value: 'salon', label: 'Salon/Barbershop', icon: '💇' },
+        { value: 'bengkel', label: 'Bengkel', icon: '🔧' },
+        { value: 'cafe', label: 'Cafe/Kedai Kopi', icon: '☕' },
+        { value: 'lainnya', label: 'Lainnya', icon: '📦' }
     ];
 
-    // Kota options (contoh)
+    // Kota options
     const kotaOptions = [
-        'Jakarta',
-        'Bandung',
-        'Surabaya',
-        'Medan',
-        'Semarang',
-        'Makassar',
-        'Palembang',
-        'Tangerang',
-        'Depok',
-        'Bekasi',
-        'Bogor',
-        'Yogyakarta',
-        'Solo',
-        'Malang',
-        'Denpasar',
-        'Lainnya'
+        'Jakarta', 'Bandung', 'Surabaya', 'Medan', 'Semarang',
+        'Makassar', 'Palembang', 'Tangerang', 'Depok', 'Bekasi',
+        'Bogor', 'Yogyakarta', 'Solo', 'Malang', 'Denpasar', 'Lainnya'
     ];
 
     // Validasi step 1
     function validateStep1() {
         if (!formData.nama_bisnis || formData.nama_bisnis.length < 3) {
-            alert('Nama bisnis minimal 3 karakter!');
             return false;
         }
         if (!formData.nama_pemilik) {
-            alert('Nama pemilik wajib diisi!');
             return false;
         }
         return true;
     }
+
+    // Check if step 1 is valid (reactive)
+    $: isStep1Valid = formData.nama_bisnis.length >= 3 && formData.nama_pemilik.length > 0;
 
     // Next step
     function nextStep() {
@@ -98,7 +90,6 @@
             await update();
             
             if (result.type === 'success' && result.data?.success) {
-                // Reset form on success
                 formData = {
                     nama_bisnis: '',
                     jenis_usaha: '',
@@ -117,7 +108,7 @@
 
     // Check password strength
     function getPasswordStrength(password) {
-        if (!password) return { level: 0, text: '', color: '' };
+        if (!password) return { level: 0, text: '', color: 'bg-slate-200' };
         
         let strength = 0;
         if (password.length >= 6) strength++;
@@ -126,388 +117,595 @@
         if (/[0-9]/.test(password)) strength++;
         if (/[^A-Za-z0-9]/.test(password)) strength++;
 
-        if (strength <= 2) return { level: strength, text: 'Lemah', color: 'bg-red-500' };
-        if (strength <= 3) return { level: strength, text: 'Sedang', color: 'bg-yellow-500' };
-        return { level: strength, text: 'Kuat', color: 'bg-green-500' };
+        if (strength <= 2) return { level: strength, text: 'Lemah', color: 'bg-red-500', textColor: 'text-red-600' };
+        if (strength <= 3) return { level: strength, text: 'Sedang', color: 'bg-amber-500', textColor: 'text-amber-600' };
+        return { level: strength, text: 'Kuat', color: 'bg-emerald-500', textColor: 'text-emerald-600' };
     }
 
     $: passwordStrength = getPasswordStrength(formData.password);
     $: passwordMatch = formData.password && formData.confirm_password && formData.password === formData.confirm_password;
+    $: passwordMismatch = formData.confirm_password && formData.password !== formData.confirm_password;
 </script>
 
 <svelte:head>
     <title>Daftar - POSKasir</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 </svelte:head>
 
-<div class="min-h-[calc(100vh-200px)] bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-12 lg:py-16">
-    <div class="max-w-xl mx-auto px-4 sm:px-6">
-        
-        <!-- ============================================ -->
-        <!-- SUCCESS STATE -->
-        <!-- ============================================ -->
-        {#if form?.success}
-            <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
-                <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <span class="text-4xl">✅</span>
-                </div>
-                <h1 class="text-2xl font-bold text-gray-900 mb-3">Pendaftaran Berhasil!</h1>
-                <p class="text-gray-600 mb-6">
-                    Terima kasih telah mendaftar di POSKasir. 
-                    Tim kami akan menghubungi Anda dalam <strong>1x24 jam</strong> untuk proses verifikasi.
+<div class="min-h-screen bg-slate-50 font-['Plus_Jakarta_Sans']">
+    <!-- Background Pattern -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-40 -right-40 w-80 h-80 bg-emerald-100 rounded-full blur-3xl opacity-60"></div>
+        <div class="absolute top-1/2 -left-20 w-60 h-60 bg-blue-100 rounded-full blur-3xl opacity-50"></div>
+        <div class="absolute -bottom-20 right-1/3 w-72 h-72 bg-violet-100 rounded-full blur-3xl opacity-40"></div>
+    </div>
+
+    <div class="relative min-h-screen flex">
+        <!-- Left Side - Branding (Hidden on mobile) -->
+        <div class="hidden lg:flex lg:w-1/2 xl:w-[55%] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-12 flex-col justify-between relative overflow-hidden">
+            <!-- Decorative Elements -->
+            <div class="absolute inset-0">
+                <div class="absolute top-20 left-20 w-32 h-32 border border-white/10 rounded-2xl rotate-12"></div>
+                <div class="absolute bottom-32 right-20 w-24 h-24 border border-white/10 rounded-full"></div>
+                <div class="absolute top-1/2 left-1/3 w-16 h-16 bg-emerald-500/20 rounded-lg blur-xl"></div>
+                <div class="absolute bottom-1/3 right-1/3 w-20 h-20 bg-blue-500/20 rounded-full blur-2xl"></div>
+            </div>
+
+            <!-- Logo -->
+            <div class="relative z-10">
+                <a href="/" class="flex items-center gap-3">
+                    <div class="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                        <Store class="w-6 h-6 text-white" />
+                    </div>
+                    <span class="text-2xl font-bold text-white tracking-tight">POSKasir</span>
+                </a>
+            </div>
+
+            <!-- Center Content -->
+            <div class="relative z-10 max-w-lg">
+                <h1 class="text-4xl xl:text-5xl font-bold text-white leading-tight mb-6">
+                    Bergabung dengan 
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+                        ribuan pebisnis
+                    </span>
+                </h1>
+                <p class="text-slate-400 text-lg leading-relaxed">
+                    Daftar gratis dan mulai kelola bisnis Anda dengan sistem kasir modern yang mudah digunakan.
                 </p>
-                
-                <div class="bg-gray-50 rounded-xl p-4 mb-6">
-                    <p class="text-sm text-gray-500 mb-1">Kode Pendaftaran Anda:</p>
-                    <p class="text-2xl font-mono font-bold text-blue-600">{form.kode}</p>
+
+                <!-- Stats -->
+                <div class="mt-10 grid grid-cols-3 gap-6">
+                    {#each [
+                        { value: '10K+', label: 'Pengguna Aktif' },
+                        { value: '50K+', label: 'Transaksi/Hari' },
+                        { value: '99.9%', label: 'Uptime' }
+                    ] as stat}
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-white">{stat.value}</div>
+                            <div class="text-sm text-slate-500">{stat.label}</div>
+                        </div>
+                    {/each}
                 </div>
 
-                <div class="space-y-3 text-left bg-blue-50 rounded-xl p-4 mb-6">
-                    <p class="font-medium text-blue-800">📋 Langkah Selanjutnya:</p>
-                    <ol class="list-decimal list-inside text-sm text-blue-700 space-y-1">
-                        <li>Cek email Anda untuk konfirmasi pendaftaran</li>
-                        <li>Tim kami akan menghubungi via WhatsApp</li>
-                        <li>Setelah verifikasi, Anda bisa login dan mulai menggunakan</li>
-                    </ol>
-                </div>
-
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <a 
-                        href="/"
-                        class="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium text-center"
-                    >
-                        Kembali ke Beranda
-                    </a>
-                    <a 
-                        href="/login"
-                        class="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium text-center"
-                    >
-                        Ke Halaman Login
-                    </a>
+                <!-- Testimonial -->
+                <div class="mt-10 p-6 bg-white/5 backdrop-blur rounded-2xl border border-white/10">
+                    <p class="text-slate-300 italic mb-4">
+                        "POSKasir membantu saya mengelola 3 cabang toko dengan mudah. Laporan real-time sangat membantu pengambilan keputusan bisnis."
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white font-semibold">
+                            B
+                        </div>
+                        <div>
+                            <div class="text-white font-medium">Budi Santoso</div>
+                            <div class="text-slate-500 text-sm">Pemilik Toko Makmur Jaya</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        {:else}
-            <!-- ============================================ -->
-            <!-- REGISTRATION FORM -->
-            <!-- ============================================ -->
-            <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
-                
-                <!-- Header -->
-                <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-8 text-center text-white">
-                    <h1 class="text-2xl font-bold mb-2">Daftar Gratis</h1>
-                    <p class="text-blue-100">Mulai kelola bisnis Anda dengan lebih mudah</p>
+
+            <!-- Footer -->
+            <div class="relative z-10 text-slate-500 text-sm">
+                © 2024 POSKasir. All rights reserved.
+            </div>
+        </div>
+
+        <!-- Right Side - Register Form -->
+        <div class="w-full lg:w-1/2 xl:w-[45%] flex items-center justify-center p-6 sm:p-8 lg:p-12 overflow-y-auto">
+            <div class="w-full max-w-md">
+                <!-- Mobile Logo -->
+                <div class="lg:hidden flex items-center justify-center gap-3 mb-8">
+                    <div class="w-11 h-11 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                        <Store class="w-5 h-5 text-white" />
+                    </div>
+                    <span class="text-xl font-bold text-slate-800 tracking-tight">POSKasir</span>
                 </div>
 
-                <!-- Progress Steps -->
-                <div class="px-6 py-4 bg-gray-50 border-b border-gray-100">
-                    <div class="flex items-center justify-center gap-4">
-                        <div class="flex items-center gap-2">
-                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium {currentStep >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}">
-                                1
-                            </div>
-                            <span class="text-sm font-medium {currentStep >= 1 ? 'text-blue-600' : 'text-gray-500'}">Data Bisnis</span>
+                <!-- ============================================ -->
+                <!-- SUCCESS STATE -->
+                <!-- ============================================ -->
+                {#if form?.success}
+                    <div class="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 text-center">
+                        <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <CheckCircle2 class="w-10 h-10 text-emerald-600" />
                         </div>
-                        <div class="w-12 h-0.5 {currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-200'}"></div>
-                        <div class="flex items-center gap-2">
-                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium {currentStep >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}">
-                                2
-                            </div>
-                            <span class="text-sm font-medium {currentStep >= 2 ? 'text-blue-600' : 'text-gray-500'}">Akun & Kontak</span>
+                        <h1 class="text-2xl font-bold text-slate-800 mb-3">Pendaftaran Berhasil!</h1>
+                        <p class="text-slate-500 mb-6">
+                            Terima kasih telah mendaftar di POSKasir. 
+                            Tim kami akan menghubungi Anda dalam <strong class="text-slate-700">1x24 jam</strong> untuk proses verifikasi.
+                        </p>
+                        
+                        <div class="bg-slate-50 rounded-xl p-5 mb-6">
+                            <p class="text-sm text-slate-500 mb-2">Kode Pendaftaran Anda</p>
+                            <p class="text-3xl font-mono font-bold text-emerald-600 tracking-wider">{form.kode}</p>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Error Message -->
-                {#if form?.message && !form?.success}
-                    <div class="mx-6 mt-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-                        <span class="text-red-500 text-lg">⚠️</span>
-                        <p class="text-red-700 text-sm">{form.message}</p>
-                    </div>
-                {/if}
-
-                <!-- Form -->
-                <form 
-                    method="POST" 
-                    action="?/register"
-                    use:enhance={handleSubmit}
-                    class="p-6 space-y-5"
-                >
-                    <!-- ============================================ -->
-                    <!-- STEP 1: Data Bisnis -->
-                    <!-- ============================================ -->
-                    {#if currentStep === 1}
-                        <div class="space-y-5">
-                            <!-- Nama Bisnis -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Nama Bisnis / Toko <span class="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    name="nama_bisnis"
-                                    bind:value={formData.nama_bisnis}
-                                    required
-                                    placeholder="Contoh: Toko Makmur Jaya"
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                />
+                        <div class="space-y-3 text-left bg-emerald-50 rounded-xl p-5 mb-6 border border-emerald-100">
+                            <div class="flex items-center gap-2 text-emerald-800 font-medium">
+                                <Sparkles class="w-4 h-4" />
+                                <span>Langkah Selanjutnya</span>
                             </div>
+                            <ol class="space-y-2 text-sm text-emerald-700">
+                                {#each [
+                                    'Cek email Anda untuk konfirmasi pendaftaran',
+                                    'Tim kami akan menghubungi via WhatsApp',
+                                    'Setelah verifikasi, Anda bisa login dan mulai menggunakan'
+                                ] as step, i}
+                                    <li class="flex items-start gap-2">
+                                        <span class="w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">
+                                            {i + 1}
+                                        </span>
+                                        <span>{step}</span>
+                                    </li>
+                                {/each}
+                            </ol>
+                        </div>
 
-                            <!-- Jenis Usaha -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Jenis Usaha
-                                </label>
-                                <select
-                                    name="jenis_usaha"
-                                    bind:value={formData.jenis_usaha}
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                >
-                                    <option value="">Pilih jenis usaha</option>
-                                    {#each jenisUsahaOptions as jenis}
-                                        <option value={jenis}>{jenis}</option>
-                                    {/each}
-                                </select>
-                            </div>
-
-                            <!-- Nama Pemilik -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Nama Pemilik <span class="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    name="nama_pemilik"
-                                    bind:value={formData.nama_pemilik}
-                                    required
-                                    placeholder="Nama lengkap Anda"
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                />
-                            </div>
-
-                            <!-- Alamat -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Alamat Bisnis
-                                </label>
-                                <textarea
-                                    name="alamat"
-                                    bind:value={formData.alamat}
-                                    rows="2"
-                                    placeholder="Alamat lengkap toko/bisnis Anda"
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-                                ></textarea>
-                            </div>
-
-                            <!-- Kota -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Kota
-                                </label>
-                                <select
-                                    name="kota"
-                                    bind:value={formData.kota}
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                >
-                                    <option value="">Pilih kota</option>
-                                    {#each kotaOptions as kota}
-                                        <option value={kota}>{kota}</option>
-                                    {/each}
-                                </select>
-                            </div>
-
-                            <!-- Next Button -->
-                            <button
-                                type="button"
-                                on:click={nextStep}
-                                class="w-full py-3.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-semibold flex items-center justify-center gap-2"
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <a 
+                                href="/"
+                                class="flex-1 px-6 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium text-center"
                             >
-                                <span>Lanjut</span>
-                                <span>→</span>
-                            </button>
+                                Ke Beranda
+                            </a>
+                            <a 
+                                href="/login"
+                                class="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-medium text-center flex items-center justify-center gap-2"
+                            >
+                                <span>Login Sekarang</span>
+                                <ArrowRight class="w-4 h-4" />
+                            </a>
+                        </div>
+                    </div>
+                {:else}
+                    <!-- ============================================ -->
+                    <!-- REGISTRATION FORM -->
+                    <!-- ============================================ -->
+                    
+                    <!-- Header -->
+                    <div class="mb-6">
+                        <h2 class="text-2xl sm:text-3xl font-bold text-slate-800 mb-2">
+                            Daftar Gratis
+                        </h2>
+                        <p class="text-slate-500">
+                            Mulai kelola bisnis Anda dengan lebih mudah
+                        </p>
+                    </div>
+
+                    <!-- Progress Steps -->
+                    <div class="mb-8">
+                        <div class="flex items-center justify-between">
+                            <!-- Step 1 -->
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all {currentStep >= 1 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-200 text-slate-500'}">
+                                    {#if currentStep > 1}
+                                        <Check class="w-5 h-5" />
+                                    {:else}
+                                        1
+                                    {/if}
+                                </div>
+                                <div class="hidden sm:block">
+                                    <div class="text-sm font-medium {currentStep >= 1 ? 'text-slate-800' : 'text-slate-400'}">Data Bisnis</div>
+                                    <div class="text-xs text-slate-400">Informasi usaha</div>
+                                </div>
+                            </div>
+
+                            <!-- Connector -->
+                            <div class="flex-1 mx-4 h-1 rounded-full bg-slate-200 overflow-hidden">
+                                <div class="h-full bg-emerald-500 transition-all duration-500 {currentStep >= 2 ? 'w-full' : 'w-0'}"></div>
+                            </div>
+
+                            <!-- Step 2 -->
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all {currentStep >= 2 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-200 text-slate-500'}">
+                                    2
+                                </div>
+                                <div class="hidden sm:block">
+                                    <div class="text-sm font-medium {currentStep >= 2 ? 'text-slate-800' : 'text-slate-400'}">Akun</div>
+                                    <div class="text-xs text-slate-400">Email & password</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error Message -->
+                    {#if form?.message && !form?.success}
+                        <div class="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+                            <div class="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <X class="w-3 h-3 text-red-600" />
+                            </div>
+                            <p class="text-red-600 text-sm">{form.message}</p>
                         </div>
                     {/if}
 
-                    <!-- ============================================ -->
-                    <!-- STEP 2: Akun & Kontak -->
-                    <!-- ============================================ -->
-                    {#if currentStep === 2}
-                        <div class="space-y-5">
-                            <!-- Hidden fields from step 1 -->
-                            <input type="hidden" name="nama_bisnis" value={formData.nama_bisnis} />
-                            <input type="hidden" name="jenis_usaha" value={formData.jenis_usaha} />
-                            <input type="hidden" name="nama_pemilik" value={formData.nama_pemilik} />
-                            <input type="hidden" name="alamat" value={formData.alamat} />
-                            <input type="hidden" name="kota" value={formData.kota} />
-
-                            <!-- Email -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Email <span class="text-red-500">*</span>
-                                </label>
-                                <div class="relative">
-                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">📧</span>
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        bind:value={formData.email}
-                                        required
-                                        placeholder="email@contoh.com"
-                                        class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                    />
-                                </div>
-                                <p class="text-xs text-gray-500 mt-1">Digunakan untuk login dan notifikasi</p>
-                            </div>
-
-                            <!-- No Telepon -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    No. WhatsApp <span class="text-red-500">*</span>
-                                </label>
-                                <div class="relative">
-                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">📱</span>
-                                    <input
-                                        type="tel"
-                                        name="no_telepon"
-                                        bind:value={formData.no_telepon}
-                                        required
-                                        placeholder="08xxxxxxxxxx"
-                                        class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                    />
-                                </div>
-                                <p class="text-xs text-gray-500 mt-1">Untuk verifikasi dan support</p>
-                            </div>
-
-                            <!-- Password -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Password <span class="text-red-500">*</span>
-                                </label>
-                                <div class="relative">
-                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔒</span>
-                                    <input
-                                        type={showPassword ? 'text' : 'password'}
-                                        name="password"
-                                        bind:value={formData.password}
-                                        required
-                                        minlength="6"
-                                        placeholder="Minimal 6 karakter"
-                                        class="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                    />
-                                    <button
-                                        type="button"
-                                        on:click={() => showPassword = !showPassword}
-                                        class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                    >
-                                        {showPassword ? '🙈' : '👁️'}
-                                    </button>
-                                </div>
-                                
-                                <!-- Password Strength -->
-                                {#if formData.password}
-                                    <div class="mt-2">
-                                        <div class="flex gap-1 mb-1">
-                                            {#each Array(5) as _, i}
-                                                <div class="h-1 flex-1 rounded-full {i < passwordStrength.level ? passwordStrength.color : 'bg-gray-200'}"></div>
-                                            {/each}
+                    <!-- Form -->
+                    <form 
+                        method="POST" 
+                        action="?/register"
+                        use:enhance={handleSubmit}
+                        class="space-y-5"
+                    >
+                        <!-- ============================================ -->
+                        <!-- STEP 1: Data Bisnis -->
+                        <!-- ============================================ -->
+                        {#if currentStep === 1}
+                            <div class="space-y-5">
+                                <!-- Nama Bisnis -->
+                                <div class="space-y-2">
+                                    <label for="nama_bisnis" class="block text-sm font-medium text-slate-700">
+                                        Nama Bisnis / Toko <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <Store class="w-5 h-5" />
                                         </div>
-                                        <p class="text-xs {passwordStrength.color.replace('bg-', 'text-').replace('-500', '-600')}">
-                                            Kekuatan password: {passwordStrength.text}
-                                        </p>
+                                        <input
+                                            type="text"
+                                            id="nama_bisnis"
+                                            name="nama_bisnis"
+                                            bind:value={formData.nama_bisnis}
+                                            required
+                                            placeholder="Contoh: Toko Makmur Jaya"
+                                            class="w-full h-12 pl-12 pr-4 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                                        />
                                     </div>
-                                {/if}
-                            </div>
-
-                            <!-- Confirm Password -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1.5">
-                                    Konfirmasi Password <span class="text-red-500">*</span>
-                                </label>
-                                <div class="relative">
-                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔒</span>
-                                    <input
-                                        type={showConfirmPassword ? 'text' : 'password'}
-                                        name="confirm_password"
-                                        bind:value={formData.confirm_password}
-                                        required
-                                        placeholder="Ulangi password"
-                                        class="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all {formData.confirm_password ? (passwordMatch ? 'border-green-500' : 'border-red-500') : ''}"
-                                    />
-                                    <button
-                                        type="button"
-                                        on:click={() => showConfirmPassword = !showConfirmPassword}
-                                        class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                    >
-                                        {showConfirmPassword ? '🙈' : '👁️'}
-                                    </button>
                                 </div>
-                                {#if formData.confirm_password}
-                                    <p class="text-xs mt-1 {passwordMatch ? 'text-green-600' : 'text-red-600'}">
-                                        {passwordMatch ? '✓ Password cocok' : '✗ Password tidak cocok'}
-                                    </p>
-                                {/if}
-                            </div>
 
-                            <!-- Terms & Conditions -->
-                            <div class="flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
-                                <input
-                                    type="checkbox"
-                                    name="agree_terms"
-                                    id="agree_terms"
-                                    bind:checked={formData.agree_terms}
-                                    required
-                                    class="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                />
-                                <label for="agree_terms" class="text-sm text-gray-600">
-                                    Saya menyetujui 
-                                    <a href="#" class="text-blue-600 hover:underline">Syarat & Ketentuan</a> 
-                                    dan 
-                                    <a href="#" class="text-blue-600 hover:underline">Kebijakan Privasi</a> 
-                                    POSKasir
-                                </label>
-                            </div>
+                                <!-- Jenis Usaha -->
+                                <div class="space-y-2">
+                                    <label for="jenis_usaha" class="block text-sm font-medium text-slate-700">
+                                        Jenis Usaha
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <Building2 class="w-5 h-5" />
+                                        </div>
+                                        <select
+                                            id="jenis_usaha"
+                                            name="jenis_usaha"
+                                            bind:value={formData.jenis_usaha}
+                                            class="w-full h-12 pl-12 pr-10 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all appearance-none cursor-pointer"
+                                        >
+                                            <option value="">Pilih jenis usaha</option>
+                                            {#each jenisUsahaOptions as jenis}
+                                                <option value={jenis.value}>{jenis.icon} {jenis.label}</option>
+                                            {/each}
+                                        </select>
+                                        <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                                            <ChevronDown class="w-5 h-5" />
+                                        </div>
+                                    </div>
+                                </div>
 
-                            <!-- Buttons -->
-                            <div class="flex gap-3">
+                                <!-- Nama Pemilik -->
+                                <div class="space-y-2">
+                                    <label for="nama_pemilik" class="block text-sm font-medium text-slate-700">
+                                        Nama Pemilik <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <User class="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            id="nama_pemilik"
+                                            name="nama_pemilik"
+                                            bind:value={formData.nama_pemilik}
+                                            required
+                                            placeholder="Nama lengkap Anda"
+                                            class="w-full h-12 pl-12 pr-4 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                <!-- Alamat -->
+                                <div class="space-y-2">
+                                    <label for="alamat" class="block text-sm font-medium text-slate-700">
+                                        Alamat Bisnis
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <MapPin class="w-5 h-5" />
+                                        </div>
+                                        <textarea
+                                            id="alamat"
+                                            name="alamat"
+                                            bind:value={formData.alamat}
+                                            rows="2"
+                                            placeholder="Alamat lengkap toko/bisnis Anda"
+                                            class="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all resize-none"
+                                        ></textarea>
+                                    </div>
+                                </div>
+
+                                <!-- Kota -->
+                                <div class="space-y-2">
+                                    <label for="kota" class="block text-sm font-medium text-slate-700">
+                                        Kota
+                                    </label>
+                                    <div class="relative">
+                                        <select
+                                            id="kota"
+                                            name="kota"
+                                            bind:value={formData.kota}
+                                            class="w-full h-12 px-4 pr-10 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all appearance-none cursor-pointer"
+                                        >
+                                            <option value="">Pilih kota</option>
+                                            {#each kotaOptions as kota}
+                                                <option value={kota}>{kota}</option>
+                                            {/each}
+                                        </select>
+                                        <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                                            <ChevronDown class="w-5 h-5" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Next Button -->
                                 <button
                                     type="button"
-                                    on:click={prevStep}
-                                    class="flex-1 py-3.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium flex items-center justify-center gap-2"
+                                    on:click={nextStep}
+                                    disabled={!isStep1Valid}
+                                    class="w-full h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200 flex items-center justify-center gap-2 group"
                                 >
-                                    <span>←</span>
-                                    <span>Kembali</span>
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting || !formData.agree_terms || !passwordMatch}
-                                    class="flex-1 py-3.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {#if isSubmitting}
-                                        <span class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                        <span>Mendaftar...</span>
-                                    {:else}
-                                        <span>Daftar Sekarang</span>
-                                    {/if}
+                                    <span>Lanjut</span>
+                                    <ArrowRight class="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                                 </button>
                             </div>
-                        </div>
-                    {/if}
-                </form>
+                        {/if}
 
-                <!-- Footer -->
-                <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 text-center">
-                    <p class="text-sm text-gray-600">
-                        Sudah punya akun? 
-                        <a href="/login" class="text-blue-600 hover:underline font-medium">Masuk di sini</a>
+                        <!-- ============================================ -->
+                        <!-- STEP 2: Akun & Kontak -->
+                        <!-- ============================================ -->
+                        {#if currentStep === 2}
+                            <div class="space-y-5">
+                                <!-- Hidden fields from step 1 -->
+                                <input type="hidden" name="nama_bisnis" value={formData.nama_bisnis} />
+                                <input type="hidden" name="jenis_usaha" value={formData.jenis_usaha} />
+                                <input type="hidden" name="nama_pemilik" value={formData.nama_pemilik} />
+                                <input type="hidden" name="alamat" value={formData.alamat} />
+                                <input type="hidden" name="kota" value={formData.kota} />
+
+                                <!-- Email -->
+                                <div class="space-y-2">
+                                    <label for="email" class="block text-sm font-medium text-slate-700">
+                                        Email <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <Mail class="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type="email"
+                                            id="email"
+                                            name="email"
+                                            bind:value={formData.email}
+                                            required
+                                            placeholder="email@contoh.com"
+                                            class="w-full h-12 pl-12 pr-4 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                                        />
+                                    </div>
+                                    <p class="text-xs text-slate-500">Digunakan untuk login dan notifikasi</p>
+                                </div>
+
+                                <!-- No Telepon -->
+                                <div class="space-y-2">
+                                    <label for="no_telepon" class="block text-sm font-medium text-slate-700">
+                                        No. WhatsApp <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <Phone class="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type="tel"
+                                            id="no_telepon"
+                                            name="no_telepon"
+                                            bind:value={formData.no_telepon}
+                                            required
+                                            placeholder="08xxxxxxxxxx"
+                                            class="w-full h-12 pl-12 pr-4 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                                        />
+                                    </div>
+                                    <p class="text-xs text-slate-500">Untuk verifikasi dan support</p>
+                                </div>
+
+                                <!-- Password -->
+                                <div class="space-y-2">
+                                    <label for="password" class="block text-sm font-medium text-slate-700">
+                                        Password <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <Lock class="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            id="password"
+                                            name="password"
+                                            bind:value={formData.password}
+                                            required
+                                            minlength="6"
+                                            placeholder="Minimal 6 karakter"
+                                            class="w-full h-12 pl-12 pr-12 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                                        />
+                                        <button
+                                            type="button"
+                                            on:click={() => showPassword = !showPassword}
+                                            class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                        >
+                                            {#if showPassword}
+                                                <EyeOff class="w-5 h-5" />
+                                            {:else}
+                                                <Eye class="w-5 h-5" />
+                                            {/if}
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Password Strength -->
+                                    {#if formData.password}
+                                        <div class="space-y-2">
+                                            <div class="flex gap-1">
+                                                {#each Array(5) as _, i}
+                                                    <div class="h-1.5 flex-1 rounded-full transition-all {i < passwordStrength.level ? passwordStrength.color : 'bg-slate-200'}"></div>
+                                                {/each}
+                                            </div>
+                                            <p class="text-xs {passwordStrength.textColor}">
+                                                Kekuatan password: {passwordStrength.text}
+                                            </p>
+                                        </div>
+                                    {/if}
+                                </div>
+
+                                <!-- Confirm Password -->
+                                <div class="space-y-2">
+                                    <label for="confirm_password" class="block text-sm font-medium text-slate-700">
+                                        Konfirmasi Password <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative group">
+                                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                            <Lock class="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type={showConfirmPassword ? 'text' : 'password'}
+                                            id="confirm_password"
+                                            name="confirm_password"
+                                            bind:value={formData.confirm_password}
+                                            required
+                                            placeholder="Ulangi password"
+                                            class="w-full h-12 pl-12 pr-12 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 transition-all {passwordMatch ? 'border-emerald-500 focus:ring-emerald-500/10' : passwordMismatch ? 'border-red-500 focus:ring-red-500/10' : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/10'}"
+                                        />
+                                        <button
+                                            type="button"
+                                            on:click={() => showConfirmPassword = !showConfirmPassword}
+                                            class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                        >
+                                            {#if showConfirmPassword}
+                                                <EyeOff class="w-5 h-5" />
+                                            {:else}
+                                                <Eye class="w-5 h-5" />
+                                            {/if}
+                                        </button>
+                                    </div>
+                                    {#if formData.confirm_password}
+                                        <p class="text-xs flex items-center gap-1 {passwordMatch ? 'text-emerald-600' : 'text-red-600'}">
+                                            {#if passwordMatch}
+                                                <Check class="w-3 h-3" />
+                                                <span>Password cocok</span>
+                                            {:else}
+                                                <X class="w-3 h-3" />
+                                                <span>Password tidak cocok</span>
+                                            {/if}
+                                        </p>
+                                    {/if}
+                                </div>
+
+                                <!-- Terms & Conditions -->
+                                <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <label class="flex items-start gap-3 cursor-pointer group">
+                                        <div class="relative mt-0.5">
+                                            <input
+                                                type="checkbox"
+                                                name="agree_terms"
+                                                id="agree_terms"
+                                                bind:checked={formData.agree_terms}
+                                                required
+                                                class="peer sr-only"
+                                            />
+                                            <div class="w-5 h-5 border-2 border-slate-300 rounded-md peer-checked:border-emerald-500 peer-checked:bg-emerald-500 transition-all"></div>
+                                            <svg class="absolute top-1 left-1 w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity" viewBox="0 0 12 12" fill="none">
+                                                <path d="M2 6L5 9L10 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </div>
+                                        <span class="text-sm text-slate-600">
+                                            Saya menyetujui 
+                                            <a href="/terms" class="text-emerald-600 hover:underline font-medium">Syarat & Ketentuan</a> 
+                                            dan 
+                                            <a href="/privacy" class="text-emerald-600 hover:underline font-medium">Kebijakan Privasi</a> 
+                                            POSKasir
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <!-- Buttons -->
+                                <div class="flex gap-3">
+                                    <button
+                                        type="button"
+                                        on:click={prevStep}
+                                        class="flex-1 h-12 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-all font-medium flex items-center justify-center gap-2 group"
+                                    >
+                                        <ArrowLeft class="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                                        <span>Kembali</span>
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting || !formData.agree_terms || !passwordMatch || !formData.email || !formData.no_telepon}
+                                        class="flex-1 h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                        {#if isSubmitting}
+                                            <Loader2 class="w-5 h-5 animate-spin" />
+                                            <span>Mendaftar...</span>
+                                        {:else}
+                                            <span>Daftar</span>
+                                        {/if}
+                                    </button>
+                                </div>
+                            </div>
+                        {/if}
+                    </form>
+
+                    <!-- Divider -->
+                    <div class="my-6 flex items-center gap-4">
+                        <div class="flex-1 h-px bg-slate-200"></div>
+                        <span class="text-sm text-slate-400">atau</span>
+                        <div class="flex-1 h-px bg-slate-200"></div>
+                    </div>
+
+                    <!-- Login Link -->
+                    <p class="text-center text-slate-600">
+                        Sudah punya akun?
+                        <a href="/login" class="font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
+                            Masuk di sini
+                        </a>
                     </p>
-                </div>
-            </div>
 
-            <!-- Help Text -->
-            <div class="mt-6 text-center">
-                <p class="text-sm text-gray-500">
-                    Butuh bantuan? Hubungi 
-                    <a href="https://wa.me/6281234567890" class="text-blue-600 hover:underline">WhatsApp Support</a>
-                </p>
+                    <!-- Security Badge -->
+                    <div class="mt-6 flex items-center justify-center gap-2 text-slate-400">
+                        <Shield class="w-4 h-4" />
+                        <span class="text-xs">Data Anda aman & terenkripsi</span>
+                    </div>
+
+                    <!-- Help Link -->
+                    <p class="mt-4 text-center text-sm text-slate-500">
+                        Butuh bantuan? 
+                        <a href="https://wa.me/6281234567890" class="text-emerald-600 hover:underline">
+                            Hubungi Support
+                        </a>
+                    </p>
+                {/if}
             </div>
-        {/if}
+        </div>
     </div>
 </div>
