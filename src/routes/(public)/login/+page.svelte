@@ -48,7 +48,7 @@
     // Di file .env.development: PUBLIC_SHOW_DEMO=true
     // Di file .env.production: PUBLIC_SHOW_DEMO=false (atau hapus saja)
     // ================================================
-    let showDemoAccounts = PUBLIC_SHOW_DEMO === 'true';
+    let showDemoAccounts = PUBLIC_SHOW_DEMO === 'true' || false;
 
     // ============================================
     // LIFECYCLE
