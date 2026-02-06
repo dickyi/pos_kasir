@@ -3,7 +3,7 @@
 // File: src/routes/(admin)/admin/settings/landing/+page.server.js
 // REMOVED: Testimonial actions (moved to /settings/testimonial)
 // ============================================
-
+import { updateStatsCache } from '$lib/data/statsCache.js';
 import { query } from '$lib/db.js';
 import { fail } from '@sveltejs/kit';
 
@@ -216,15 +216,19 @@ export const actions = {
         }
     },
 
-    refreshStatsCache: async () => {
-        try {
-            await query(`CALL sp_update_stats_cache()`);
-            return { success: true, message: 'Cache statistik berhasil direfresh!' };
-        } catch (error) {
-            console.error('Error refreshing stats cache:', error);
-            return fail(500, { success: false, message: 'Gagal refresh cache. Pastikan stored procedure sudah diinstall.' });
+   refreshStatsCache: async () => {
+    try {
+        const result = await updateStatsCache();
+        if (result.success) {
+            return { success: true, message: result.message };
+        } else {
+            return fail(500, { success: false, message: result.message });
         }
-    },
+    } catch (error) {
+        console.error('Error refreshing stats cache:', error);
+        return fail(500, { success: false, message: 'Gagal refresh cache: ' + error.message });
+    }
+},
 
     deleteStat: async ({ request }) => {
         const data = await request.formData();

@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-pin-logs",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-rate-limits",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-email-logs",
+      "schedule": "0 4 * * 1"
+    }
+  ]
+}
