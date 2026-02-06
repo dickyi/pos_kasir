@@ -1,0 +1,90 @@
+<!--
+    UnlockModal.svelte - Modal Unlock Akun
+    ======================================
+    Konfirmasi untuk membuka kunci akun yang terkunci
+-->
+<script>
+    import { enhance } from '$app/forms';
+    import { Unlock, Timer } from 'lucide-svelte';
+    import { createEventDispatcher } from 'svelte';
+
+    export let show = false;
+    export let user = null;
+    export let isSubmitting = false;
+
+    const dispatch = createEventDispatcher();
+
+    function close() {
+        dispatch('close');
+    }
+
+    function handleSubmit() {
+        dispatch('submitting');
+        return async ({ result }) => {
+            dispatch('submitted', result);
+        };
+    }
+</script>
+
+{#if show && user}
+    <div 
+        class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" 
+        on:click|self={close}
+        on:keydown={(e) => e.key === 'Escape' && close()}
+        role="dialog"
+        aria-modal="true"
+    >
+        <div class="bg-white rounded-xl w-full max-w-sm shadow-xl">
+            <!-- Header -->
+            <div class="p-5 text-center">
+                <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Unlock size={24} class="text-red-600" />
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900">Buka Kunci Akun?</h3>
+                <p class="text-sm text-gray-500 mt-1">{user.nama}</p>
+                {#if user.lock_time_remaining}
+                    <p class="text-xs text-red-500 mt-2 flex items-center justify-center gap-1">
+                        <Timer size={12} />
+                        Terkunci: {user.lock_time_remaining} lagi
+                    </p>
+                {/if}
+            </div>
+            
+            <!-- Info -->
+            <div class="px-5 pb-3">
+                <div class="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1.5">
+                    <p>• Counter percobaan gagal akan direset</p>
+                    <p>• User bisa login kembali</p>
+                    <p>• PIN tidak berubah</p>
+                </div>
+            </div>
+            
+            <!-- Form -->
+            <form 
+                method="POST" 
+                action="?/unlockUser" 
+                use:enhance={handleSubmit}
+                class="px-5 pb-5"
+            >
+                <input type="hidden" name="user_id" value={user.id} />
+                
+                <div class="flex gap-3">
+                    <button 
+                        type="button" 
+                        on:click={close} 
+                        class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                        Batal
+                    </button>
+                    <button 
+                        type="submit" 
+                        disabled={isSubmitting} 
+                        class="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:bg-red-400 rounded-lg transition-colors"
+                    >
+                        {isSubmitting ? 'Membuka...' : 'Buka Kunci'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+{/if}

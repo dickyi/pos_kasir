@@ -15,6 +15,7 @@
 		"@eslint/compat": "^1.4.0",
 		"@eslint/js": "^9.39.1",
 		"@sveltejs/adapter-auto": "^7.0.0",
+		"@sveltejs/adapter-vercel": "^6.3.1",
 		"@sveltejs/kit": "^2.49.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@tailwindcss/postcss": "^4.1.18",
@@ -32,7 +33,16 @@
 		"vite": "^7.2.6"
 	},
 	"dependencies": {
+		"bcrypt": "^6.0.0",
+		"bcryptjs": "^3.0.3",
+		"chart.js": "^4.5.1",
+		"date-fns": "^4.1.0",
+		"dompurify": "^3.3.1",
+		"exceljs": "^4.4.0",
+		"jspdf": "^4.0.0",
 		"lucide-svelte": "^0.562.0",
-		"mysql2": "^3.16.0"
+		"mysql2": "^3.16.0",
+		"nodemailer": "^7.0.12",
+		"uuid": "^13.0.0"
 	}
 }

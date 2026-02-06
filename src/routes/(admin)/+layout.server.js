@@ -4,7 +4,7 @@
 // ============================================
 
 import { redirect } from '@sveltejs/kit';
-import { getUserFromSession } from '$lib/auth.js';
+import { getUserFromSession, isAdmin } from '$lib/auth.js';
 
 export async function load({ cookies, url }) {
     // Ambil user dari session
@@ -15,13 +15,21 @@ export async function load({ cookies, url }) {
         throw redirect(302, '/login?redirect=' + encodeURIComponent(url.pathname));
     }
 
-    // Jika bukan admin, redirect ke halaman tenant
-    if (user.role !== 'admin') {
+    // Cek apakah user adalah admin platform (super_admin, admin, atau support)
+    // Menggunakan helper function dari auth.js
+    if (!isAdmin(user)) {
+        // Jika bukan admin, redirect ke tenant dashboard
         throw redirect(302, '/tenant/dashboard');
     }
 
     // Return user data untuk digunakan di layout dan halaman
     return {
-        user: user
+        user: {
+            id: user.id,
+            nama: user.nama,
+            email: user.email,
+            role: user.role,  // super_admin, admin, atau support
+            logged_in_at: user.logged_in_at
+        }
     };
 }

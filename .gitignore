@@ -12,12 +12,17 @@ node_modules
 .DS_Store
 Thumbs.db
 
-# Env
+# Env - semua file .env KECUALI .env.example
 .env
-.env.*
+.env.local
+.env.development
+.env.production
+.env.test
 !.env.example
-!.env.test
 
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Windows reserved names
+nul
