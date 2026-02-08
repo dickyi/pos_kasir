@@ -2,12 +2,18 @@
     import { enhance } from '$app/forms';
     import { 
         Store, Building2, User, MapPin, Mail, Phone, Lock, Eye, EyeOff, 
-        ArrowRight, ArrowLeft, Loader2, CheckCircle2, Sparkles,
+        ArrowRight, ArrowLeft, Loader2, CheckCircle2,
         ChevronDown, Check, X, Shield, Fingerprint, Zap, Globe, MapPinned
     } from 'lucide-svelte';
-    import { fly, fade, scale } from 'svelte/transition';
+    import { fly, scale, fade } from 'svelte/transition';
     import { quintOut, elasticOut } from 'svelte/easing';
-    import { onMount } from 'svelte';
+    
+    // [FIX] Import data wilayah lokal dengan path yang benar
+    import { provinsiList, getKotaByProvinsiId, getProvinsiNameById } from './wilayah-indonesia.js';
+    
+    // Import komponen Terms & Privacy untuk modal
+    import TermsContent from '$lib/components/public/TermsContent.svelte';
+    import PrivacyContent from '$lib/components/public/PrivacyContent.svelte';
     
     // Form state
     export let form;
@@ -18,7 +24,7 @@
         nama_bisnis: form?.data?.nama_bisnis || '',
         jenis_usaha: form?.data?.jenis_usaha || '',
         alamat: form?.data?.alamat || '',
-        provinsi: form?.data?.provinsi || '',
+        provinsiId: '', // [FIX] Simpan ID untuk dropdown
         kota: form?.data?.kota || '',
         email: form?.data?.email || '',
         no_telepon: form?.data?.no_telepon || '',
@@ -34,17 +40,18 @@
     let currentStep = 1;
     const totalSteps = 2;
 
+    // Modal state
+    let showTermsModal = false;
+    let showPrivacyModal = false;
+
     // Honeypot field value (harus tetap kosong)
     let honeypotValue = '';
 
     // Focus states untuk animasi
     let focusedField = null;
 
-    // Wilayah Indonesia data dari API Emsifa
-    let provinsiList = [];
+    // Wilayah Indonesia - data lokal, tidak perlu loading
     let kotaList = [];
-    let isLoadingProvinsi = true;
-    let isLoadingKota = false;
 
     // Jenis usaha options - tanpa icon, lebih clean
     const jenisUsahaOptions = [
@@ -72,54 +79,17 @@
     // Nilai final yang akan dikirim ke server
     $: finalJenisUsaha = isJenisUsahaLainnya ? jenisUsahaLainnya : formData.jenis_usaha;
     $: finalKota = isKotaLainnya ? kotaLainnya : formData.kota;
+    
+    // [FIX] Nama provinsi untuk dikirim ke server (bukan ID)
+    $: provinsiName = getProvinsiNameById(formData.provinsiId);
 
-    // Get provinsi name by ID
-    function getProvinsiName(id) {
-        const prov = provinsiList.find(p => p.id === id);
-        return prov ? prov.name : '';
-    }
-
-    // Load provinsi on mount
-    onMount(async () => {
-        try {
-            const res = await fetch('https://emsifa.github.io/api-wilayah-indonesia/api/provinces.json');
-            if (res.ok) {
-                provinsiList = await res.json();
-            }
-        } catch (error) {
-            console.error('Gagal memuat data provinsi:', error);
-        } finally {
-            isLoadingProvinsi = false;
-        }
-    });
-
-    // Load kota when provinsi changes
-    async function loadKota(provinsiId) {
-        if (!provinsiId) {
-            kotaList = [];
-            return;
-        }
-        
-        isLoadingKota = true;
+    // Load kota when provinsi changes (dari data lokal - instant)
+    $: if (formData.provinsiId) {
+        kotaList = getKotaByProvinsiId(formData.provinsiId);
         formData.kota = '';
         kotaLainnya = '';
-        
-        try {
-            const res = await fetch(`https://emsifa.github.io/api-wilayah-indonesia/api/regencies/${provinsiId}.json`);
-            if (res.ok) {
-                kotaList = await res.json();
-            }
-        } catch (error) {
-            console.error('Gagal memuat data kota:', error);
-            kotaList = [];
-        } finally {
-            isLoadingKota = false;
-        }
-    }
-
-    // Watch provinsi changes
-    $: if (formData.provinsi) {
-        loadKota(formData.provinsi);
+    } else {
+        kotaList = [];
     }
 
     // Reset kotaLainnya when not selecting "Lainnya"
@@ -128,6 +98,32 @@
 
     // Validasi step 1 - Siapa & Apa (Urutan baru: Nama Pemilik dulu)
     $: isStep1Valid = formData.nama_pemilik.length > 0 && formData.nama_bisnis.length >= 3;
+
+    // Modal functions
+    function openTermsModal(e) {
+        e.preventDefault();
+        showTermsModal = true;
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function openPrivacyModal(e) {
+        e.preventDefault();
+        showPrivacyModal = true;
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeModals() {
+        showTermsModal = false;
+        showPrivacyModal = false;
+        document.body.style.overflow = '';
+    }
+    
+    // Close modal on escape key
+    function handleKeydown(e) {
+        if (e.key === 'Escape') {
+            closeModals();
+        }
+    }
 
     function nextStep() {
         if (currentStep === 1 && isStep1Valid) {
@@ -155,7 +151,7 @@
                     nama_bisnis: '',
                     jenis_usaha: '',
                     alamat: '',
-                    provinsi: '',
+                    provinsiId: '',
                     kota: '',
                     email: '',
                     no_telepon: '',
@@ -206,12 +202,128 @@
     $: isPhoneValid = /^[0-9]{10,15}$/.test(formData.no_telepon.replace(/[-\s]/g, ''));
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <svelte:head>
     <title>Daftar - POSKasir</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </svelte:head>
+
+<!-- Terms Modal -->
+{#if showTermsModal}
+    <div 
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        transition:fade={{ duration: 200 }}
+    >
+        <!-- Backdrop -->
+        <button 
+            type="button"
+            class="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default"
+            on:click={closeModals}
+            aria-label="Tutup modal"
+        ></button>
+        
+        <!-- Modal Content -->
+        <div 
+            class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+            transition:scale={{ start: 0.95, duration: 200 }}
+        >
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <h2 class="text-lg font-semibold text-slate-800">Syarat & Ketentuan</h2>
+                <button 
+                    type="button"
+                    on:click={closeModals}
+                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 transition-colors text-slate-500 hover:text-slate-700"
+                >
+                    <X class="w-5 h-5" />
+                </button>
+            </div>
+            
+            <!-- Modal Body - Scrollable -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <TermsContent appName="POSKasir" lastUpdated="1 Februari 2026" />
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
+                <a 
+                    href="/syarat-ketentuan" 
+                    target="_blank"
+                    class="text-sm text-slate-500 hover:text-emerald-600 transition-colors"
+                >
+                    Buka di tab baru ↗
+                </a>
+                <button 
+                    type="button"
+                    on:click={closeModals}
+                    class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
+                >
+                    Saya Mengerti
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Privacy Modal -->
+{#if showPrivacyModal}
+    <div 
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        transition:fade={{ duration: 200 }}
+    >
+        <!-- Backdrop -->
+        <button 
+            type="button"
+            class="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default"
+            on:click={closeModals}
+            aria-label="Tutup modal"
+        ></button>
+        
+        <!-- Modal Content -->
+        <div 
+            class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+            transition:scale={{ start: 0.95, duration: 200 }}
+        >
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <h2 class="text-lg font-semibold text-slate-800">Kebijakan Privasi</h2>
+                <button 
+                    type="button"
+                    on:click={closeModals}
+                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 transition-colors text-slate-500 hover:text-slate-700"
+                >
+                    <X class="w-5 h-5" />
+                </button>
+            </div>
+            
+            <!-- Modal Body - Scrollable -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <PrivacyContent appName="POSKasir" lastUpdated="1 Februari 2026" />
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
+                <a 
+                    href="/kebijakan-privasi" 
+                    target="_blank"
+                    class="text-sm text-slate-500 hover:text-emerald-600 transition-colors"
+                >
+                    Buka di tab baru ↗
+                </a>
+                <button 
+                    type="button"
+                    on:click={closeModals}
+                    class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
+                >
+                    Saya Mengerti
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
 
 <div class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 font-['Outfit']">
     <!-- Subtle Background Pattern -->
@@ -304,8 +416,8 @@
             <div class="relative z-10 flex items-center justify-between text-slate-500 text-sm">
                 <span>&copy; {new Date().getFullYear()} POSKasir</span>
                 <div class="flex items-center gap-4">
-                    <a href="/privacy" class="hover:text-slate-300 transition-colors">Privasi</a>
-                    <a href="/terms" class="hover:text-slate-300 transition-colors">Syarat</a>
+                    <a href="/kebijakan-privasi" class="hover:text-slate-300 transition-colors">Privasi</a>
+                    <a href="/syarat-ketentuan" class="hover:text-slate-300 transition-colors">Syarat</a>
                 </div>
             </div>
         </div>
@@ -565,7 +677,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- Provinsi (API Emsifa) -->
+                                    <!-- Provinsi (Data Lokal - Instant) -->
                                     <div class="space-y-1.5">
                                         <label for="provinsi" class="block text-sm font-medium text-slate-700">
                                             Provinsi <span class="text-slate-400 font-normal">(opsional)</span>
@@ -576,28 +688,19 @@
                                             </div>
                                             <select
                                                 id="provinsi"
-                                                bind:value={formData.provinsi}
-                                                disabled={isLoadingProvinsi}
-                                                class="w-full h-11 pl-11 pr-10 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer text-sm disabled:bg-slate-100 disabled:cursor-wait"
+                                                bind:value={formData.provinsiId}
+                                                class="w-full h-11 pl-11 pr-10 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer text-sm"
                                             >
-                                                <option value="">
-                                                    {isLoadingProvinsi ? 'Memuat provinsi...' : 'Pilih provinsi'}
-                                                </option>
+                                                <option value="">Pilih provinsi</option>
                                                 {#each provinsiList as prov}
                                                     <option value={prov.id}>{prov.name}</option>
                                                 {/each}
                                             </select>
-                                            {#if isLoadingProvinsi}
-                                                <div class="absolute right-3.5 top-1/2 -translate-y-1/2">
-                                                    <Loader2 class="w-4 h-4 text-emerald-500 animate-spin" />
-                                                </div>
-                                            {:else}
-                                                <ChevronDown class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                                            {/if}
+                                            <ChevronDown class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                                         </div>
                                     </div>
 
-                                    <!-- Kota/Kabupaten (Cascading dari Provinsi) -->
+                                    <!-- Kota/Kabupaten (Cascading dari Provinsi - Instant) -->
                                     <div class="space-y-1.5">
                                         <label for="kota" class="block text-sm font-medium text-slate-700">
                                             Kota/Kabupaten <span class="text-slate-400 font-normal">(opsional)</span>
@@ -609,17 +712,11 @@
                                             <select
                                                 id="kota"
                                                 bind:value={formData.kota}
-                                                disabled={!formData.provinsi || isLoadingKota}
+                                                disabled={!formData.provinsiId}
                                                 class="w-full h-11 pl-11 pr-10 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
                                             >
                                                 <option value="">
-                                                    {#if !formData.provinsi}
-                                                        Pilih provinsi terlebih dahulu
-                                                    {:else if isLoadingKota}
-                                                        Memuat kota...
-                                                    {:else}
-                                                        Pilih kota/kabupaten
-                                                    {/if}
+                                                    {!formData.provinsiId ? 'Pilih provinsi terlebih dahulu' : 'Pilih kota/kabupaten'}
                                                 </option>
                                                 {#each kotaList as kota}
                                                     <option value={kota.name}>{kota.name}</option>
@@ -628,13 +725,7 @@
                                                     <option value="Lainnya">Lainnya</option>
                                                 {/if}
                                             </select>
-                                            {#if isLoadingKota}
-                                                <div class="absolute right-3.5 top-1/2 -translate-y-1/2">
-                                                    <Loader2 class="w-4 h-4 text-emerald-500 animate-spin" />
-                                                </div>
-                                            {:else}
-                                                <ChevronDown class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                                            {/if}
+                                            <ChevronDown class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                                         </div>
                                         
                                         <!-- Input manual jika pilih Lainnya -->
@@ -666,12 +757,12 @@
                             <!-- STEP 2: Akun & Keamanan -->
                             {#if currentStep === 2}
                                 <div class="space-y-4" in:fly={{ x: 20, duration: 300 }}>
-                                    <!-- Hidden fields from step 1 -->
+                                    <!-- [FIX] Hidden fields from step 1 - provinsi mengirim NAMA bukan ID -->
                                     <input type="hidden" name="nama_pemilik" value={formData.nama_pemilik} />
                                     <input type="hidden" name="nama_bisnis" value={formData.nama_bisnis} />
                                     <input type="hidden" name="jenis_usaha" value={finalJenisUsaha} />
                                     <input type="hidden" name="alamat" value={formData.alamat} />
-                                    <input type="hidden" name="provinsi" value={getProvinsiName(formData.provinsi)} />
+                                    <input type="hidden" name="provinsi" value={provinsiName} />
                                     <input type="hidden" name="kota" value={finalKota} />
 
                                     <!-- Email -->
@@ -841,7 +932,7 @@
                                         {/if}
                                     </div>
 
-                                    <!-- Terms Agreement -->
+                                    <!-- Terms Agreement - UPDATED dengan modal -->
                                     <label class="flex items-start gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-colors group">
                                         <div class="relative mt-0.5">
                                             <input type="checkbox" name="agree_terms" bind:checked={formData.agree_terms} required class="peer sr-only" />
@@ -853,9 +944,21 @@
                                         </div>
                                         <span class="text-sm text-slate-600 leading-relaxed">
                                             Saya menyetujui 
-                                            <a href="/terms" class="text-emerald-600 hover:underline font-medium">Syarat & Ketentuan</a> 
+                                            <button 
+                                                type="button" 
+                                                on:click={openTermsModal}
+                                                class="text-emerald-600 hover:underline font-medium"
+                                            >
+                                                Syarat & Ketentuan
+                                            </button> 
                                             dan 
-                                            <a href="/privacy" class="text-emerald-600 hover:underline font-medium">Kebijakan Privasi</a>
+                                            <button 
+                                                type="button" 
+                                                on:click={openPrivacyModal}
+                                                class="text-emerald-600 hover:underline font-medium"
+                                            >
+                                                Kebijakan Privasi
+                                            </button>
                                         </span>
                                     </label>
 
