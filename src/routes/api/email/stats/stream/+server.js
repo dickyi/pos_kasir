@@ -2,16 +2,17 @@
 // EMAIL STATS STREAM - Server-Sent Events (SSE)
 // File: src/routes/api/email/stats/stream/+server.js
 // 
-// Real-time streaming endpoint untuk:
-// - Email statistics (total_sent, total_failed, today, queue)
-// - Recent email logs
-// - Template stats
+// ✅ UPDATED: Vercel-friendly version
 // 
-// Fitur:
-// - Auto-reconnect jika koneksi putus
-// - Heartbeat setiap 30 detik untuk keep-alive
-// - Delta update (hanya kirim jika ada perubahan)
-// - Rate limiting (max 1 update per detik)
+// Perubahan dari versi sebelumnya:
+// - MAX_CONNECTION_TIME dikurangi ke 25 detik (di bawah Vercel timeout)
+// - CHECK_INTERVAL diperbesar ke 5 detik (kurangi DB queries)
+// - Menambahkan header X-Data-Source untuk deteksi di client
+// - Graceful close saat mendekati timeout
+// 
+// CATATAN: Di Vercel, SSE akan timeout setelah ~25 detik.
+// Client (emailStore.js) akan otomatis fallback ke polling.
+// Di VPS/dedicated server, SSE tetap berjalan normal.
 // ============================================
 
 import { query } from '$lib/db.js';
@@ -22,13 +23,15 @@ import { query } from '$lib/db.js';
 
 const CONFIG = {
     // Interval check untuk perubahan data (ms)
-    CHECK_INTERVAL: 2000,  // 2 detik
+    CHECK_INTERVAL: 5000,  // 5 detik (lebih hemat DB queries)
     
     // Heartbeat interval untuk keep-alive (ms)
-    HEARTBEAT_INTERVAL: 30000,  // 30 detik
+    HEARTBEAT_INTERVAL: 15000,  // 15 detik
     
-    // Max connection time (ms) - auto close setelah ini
-    MAX_CONNECTION_TIME: 5 * 60 * 1000,  // 5 menit
+    // ✅ UPDATED: Max connection time - 25 detik untuk Vercel compatibility
+    // Vercel Pro: 60s timeout, Free: 10s timeout
+    // Kita pakai 25 detik supaya aman di semua plan
+    MAX_CONNECTION_TIME: 25 * 1000,  // 25 detik
     
     // Jumlah recent logs yang dikirim
     RECENT_LOGS_LIMIT: 10
@@ -38,12 +41,8 @@ const CONFIG = {
 // HELPER FUNCTIONS
 // ============================================
 
-/**
- * Ambil email stats dari database
- */
 async function getEmailStats() {
     try {
-        // Coba gunakan view jika ada
         const stats = await query(`
             SELECT 
                 (SELECT COUNT(*) FROM email_logs WHERE status = 'sent') as total_sent,
@@ -69,9 +68,6 @@ async function getEmailStats() {
     }
 }
 
-/**
- * Ambil recent email logs
- */
 async function getRecentLogs() {
     try {
         const logs = await query(`
@@ -97,9 +93,6 @@ async function getRecentLogs() {
     }
 }
 
-/**
- * Ambil template stats
- */
 async function getTemplateStats() {
     try {
         const templates = await query(`
@@ -121,16 +114,10 @@ async function getTemplateStats() {
     }
 }
 
-/**
- * Format SSE message
- */
 function formatSSE(event, data) {
     return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-/**
- * Generate hash dari data untuk deteksi perubahan
- */
 function hashData(data) {
     return JSON.stringify(data);
 }
@@ -140,10 +127,6 @@ function hashData(data) {
 // ============================================
 
 export async function GET({ request }) {
-    // Check for SSE support via Accept header
-    const accept = request.headers.get('accept');
-    
-    // Variables untuk tracking state
     let lastStatsHash = '';
     let lastLogsHash = '';
     let lastTemplateHash = '';
@@ -152,48 +135,40 @@ export async function GET({ request }) {
     let heartbeatInterval;
     let connectionTimeout;
     
-    // Create readable stream
     const stream = new ReadableStream({
         async start(controller) {
             const encoder = new TextEncoder();
             
-            /**
-             * Send data to client
-             */
             const send = (event, data) => {
                 try {
                     controller.enqueue(encoder.encode(formatSSE(event, data)));
                 } catch (e) {
-                    // Connection closed
                     isActive = false;
                 }
             };
             
-            /**
-             * Send initial data
-             */
             const sendInitialData = async () => {
                 try {
                     const stats = await getEmailStats();
                     const logs = await getRecentLogs();
                     const templates = await getTemplateStats();
                     
-                    // Store hashes
                     lastStatsHash = hashData(stats);
                     lastLogsHash = hashData(logs);
                     lastTemplateHash = hashData(templates);
                     
-                    // Send connected event
+                    // ✅ Send connected event dengan info source
                     send('connected', {
                         message: 'Connected to email stats stream',
                         timestamp: new Date().toISOString(),
+                        source: 'sse',
                         config: {
                             checkInterval: CONFIG.CHECK_INTERVAL,
-                            heartbeatInterval: CONFIG.HEARTBEAT_INTERVAL
+                            heartbeatInterval: CONFIG.HEARTBEAT_INTERVAL,
+                            maxConnectionTime: CONFIG.MAX_CONNECTION_TIME
                         }
                     });
                     
-                    // Send initial data
                     send('stats', {
                         ...stats,
                         timestamp: new Date().toISOString()
@@ -217,14 +192,10 @@ export async function GET({ request }) {
                 }
             };
             
-            /**
-             * Check for updates and send delta
-             */
             const checkUpdates = async () => {
                 if (!isActive) return;
                 
                 try {
-                    // Check stats
                     const stats = await getEmailStats();
                     const statsHash = hashData(stats);
                     
@@ -237,7 +208,6 @@ export async function GET({ request }) {
                         });
                     }
                     
-                    // Check logs
                     const logs = await getRecentLogs();
                     const logsHash = hashData(logs);
                     
@@ -251,7 +221,6 @@ export async function GET({ request }) {
                         });
                     }
                     
-                    // Check templates (less frequently - every 5 checks)
                     const templates = await getTemplateStats();
                     const templateHash = hashData(templates);
                     
@@ -270,9 +239,6 @@ export async function GET({ request }) {
                 }
             };
             
-            /**
-             * Send heartbeat for keep-alive
-             */
             const sendHeartbeat = () => {
                 if (!isActive) return;
                 send('heartbeat', {
@@ -281,9 +247,6 @@ export async function GET({ request }) {
                 });
             };
             
-            /**
-             * Cleanup function
-             */
             const cleanup = () => {
                 isActive = false;
                 if (checkInterval) clearInterval(checkInterval);
@@ -306,11 +269,13 @@ export async function GET({ request }) {
             // Start heartbeat
             heartbeatInterval = setInterval(sendHeartbeat, CONFIG.HEARTBEAT_INTERVAL);
             
-            // Set max connection timeout
+            // ✅ UPDATED: Shorter timeout for Vercel compatibility
+            // Client akan otomatis reconnect atau fallback ke polling
             connectionTimeout = setTimeout(() => {
                 send('timeout', {
-                    message: 'Connection timeout, please reconnect',
-                    timestamp: new Date().toISOString()
+                    message: 'Connection timeout, client should fallback to polling',
+                    timestamp: new Date().toISOString(),
+                    shouldFallback: true
                 });
                 cleanup();
             }, CONFIG.MAX_CONNECTION_TIME);
@@ -324,13 +289,13 @@ export async function GET({ request }) {
         }
     });
     
-    // Return SSE response
     return new Response(stream, {
         headers: {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache, no-transform',
             'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',  // Disable nginx buffering
+            'X-Accel-Buffering': 'no',
+            'X-Data-Source': 'sse',
             'Access-Control-Allow-Origin': '*'
         }
     });
