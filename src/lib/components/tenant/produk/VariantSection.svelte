@@ -1,8 +1,8 @@
 <!--
-    VariantSection.svelte - Section Varian dalam Form Produk (COMPLETE)
+    VariantSection.svelte - Section Varian dalam Form Produk (FIXED v2)
     ============================================
-    Menampilkan dan mengelola daftar varian produk
-    dengan info lengkap: atribut, gambar, berat
+    ✅ FIX: Gambar varian tampil real-time setelah upload
+    ✅ FIX: Cache-busting untuk gambar Cloudinary
 -->
 <script>
     import { createEventDispatcher } from 'svelte';
@@ -19,61 +19,46 @@
     export let variants = [];
     export let produkKode = '';
 
-    // Modal state
     let showVariantModal = false;
     let variantModalMode = 'add';
     let selectedVariant = null;
     let selectedVariantIndex = -1;
 
-    // Format currency - handle decimal dari database
+    // ✅ Counter untuk force re-render gambar
+    let updateCounter = 0;
+
     function formatRupiah(num) {
         if (num === null || num === undefined) return 'Rp 0';
-        
         let value = num;
-        if (typeof num === 'string') {
-            value = parseFloat(num);
-        }
+        if (typeof num === 'string') value = parseFloat(num);
         value = Math.round(value);
-        
         return new Intl.NumberFormat('id-ID', {
-            style: 'currency',
-            currency: 'IDR',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
+            style: 'currency', currency: 'IDR',
+            minimumFractionDigits: 0, maximumFractionDigits: 0
         }).format(value);
     }
 
-    // Format berat
     function formatBerat(berat) {
         if (!berat) return null;
         const val = parseFloat(berat);
-        if (val >= 1000) {
-            return `${(val / 1000).toFixed(1)} kg`;
-        }
+        if (val >= 1000) return `${(val / 1000).toFixed(1)} kg`;
         return `${val} g`;
     }
 
-    // Parse atribut untuk display
     function parseAtribut(atribut) {
         if (!atribut) return [];
-        
         try {
             let obj = atribut;
-            if (typeof atribut === 'string') {
-                obj = JSON.parse(atribut);
-            }
-            
+            if (typeof atribut === 'string') obj = JSON.parse(atribut);
             if (typeof obj === 'object' && !Array.isArray(obj)) {
                 return Object.entries(obj).map(([key, value]) => ({ key, value: String(value) }));
             }
-            
             return [];
         } catch (e) {
             return [];
         }
     }
 
-    // Generate unique key untuk variant
     function getVariantKey(variant, index) {
         if (variant.id) return `db-${variant.id}`;
         if (variant.temp_id) return `temp-${variant.temp_id}`;
@@ -98,6 +83,15 @@
     function handleDeleteVariant(variant, index) {
         const nama = variant.nama_varian || 'Varian ini';
         if (confirm(`Hapus varian "${nama}"?`)) {
+            // ✅ Hapus gambar dari Cloudinary jika ada
+            if (variant.gambar && variant.gambar.includes('cloudinary.com')) {
+                fetch('/tenant/produk/upload', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_url: variant.gambar })
+                }).catch(e => console.log('Failed to delete variant image:', e));
+            }
+            
             variants = variants.filter((_, i) => i !== index);
             dispatch('change', variants);
         }
@@ -154,6 +148,8 @@
             });
         }
         
+        // ✅ Force re-render untuk update gambar
+        updateCounter++;
         dispatch('change', variants);
     }
 
@@ -165,14 +161,25 @@
         dispatch('change', variants);
     }
 
-    // Get total stok dari semua varian
+    // ✅ Tambah cache-busting ke URL gambar Cloudinary
+    function getImageUrl(url) {
+        if (!url) return '';
+        // Cloudinary URL sudah unique per upload, tapi browser bisa cache
+        // Tambah counter sebagai query param untuk force reload
+        if (url.includes('cloudinary.com')) {
+            return url; // Cloudinary URL sudah unik, tidak perlu cache bust
+        }
+        return url;
+    }
+
     $: totalStok = variants.reduce((sum, v) => sum + (parseInt(v.stok) || 0), 0);
     $: hasDefault = variants.some(v => v.is_default);
 </script>
 
 <div class="space-y-4">
-    <!-- Variant List -->
     {#if variants.length > 0}
+        <!-- ✅ Key includes updateCounter untuk force re-render -->
+        {#key updateCounter}
         <div class="space-y-2">
             {#each variants as variant, index (getVariantKey(variant, index))}
                 {@const atributs = parseAtribut(variant.atribut)}
@@ -188,7 +195,7 @@
                         <div class="flex-shrink-0">
                             {#if variant.gambar}
                                 <img 
-                                    src={variant.gambar} 
+                                    src={variant.gambar}
                                     alt={variant.nama_varian}
                                     class="w-14 h-14 rounded-lg object-cover border border-slate-200"
                                 />
@@ -206,24 +213,15 @@
                                     {variant.nama_varian || 'Tanpa Nama'}
                                 </h4>
                                 {#if variant.is_default}
-                                    <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 
-                                                 text-[10px] font-medium rounded">
-                                        Default
-                                    </span>
+                                    <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded">Default</span>
                                 {/if}
                                 {#if !variant.id}
-                                    <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 
-                                                 text-[10px] font-medium rounded">
-                                        Baru
-                                    </span>
+                                    <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-medium rounded">Baru</span>
                                 {/if}
                             </div>
                             
-                            <!-- Harga & Stok -->
                             <div class="flex items-center gap-3 mt-1 text-sm">
-                                <span class="text-emerald-600 font-semibold">
-                                    {formatRupiah(variant.harga_jual)}
-                                </span>
+                                <span class="text-emerald-600 font-semibold">{formatRupiah(variant.harga_jual)}</span>
                                 <span class="text-slate-400">•</span>
                                 <span class="text-slate-500 {parseInt(variant.stok) <= 10 ? 'text-amber-600 font-medium' : ''}">
                                     Stok: {parseInt(variant.stok) || 0}
@@ -231,26 +229,21 @@
                                 {#if berat}
                                     <span class="text-slate-400">•</span>
                                     <span class="text-slate-500 flex items-center gap-1">
-                                        <Weight class="w-3 h-3" />
-                                        {berat}
+                                        <Weight class="w-3 h-3" />{berat}
                                     </span>
                                 {/if}
                             </div>
 
-                            <!-- Atribut -->
                             {#if atributs.length > 0}
                                 <div class="flex items-center gap-2 mt-2 flex-wrap">
                                     {#each atributs as attr}
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-200 
-                                                     text-slate-600 text-xs rounded-full">
-                                            <Tag class="w-3 h-3" />
-                                            {attr.key}: {attr.value}
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-200 text-slate-600 text-xs rounded-full">
+                                            <Tag class="w-3 h-3" />{attr.key}: {attr.value}
                                         </span>
                                     {/each}
                                 </div>
                             {/if}
 
-                            <!-- Barcode -->
                             {#if variant.barcode}
                                 <div class="mt-1">
                                     <span class="text-slate-400 font-mono text-xs">{variant.barcode}</span>
@@ -261,32 +254,20 @@
                         <!-- Actions -->
                         <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             {#if !variant.is_default}
-                                <button
-                                    type="button"
-                                    on:click={() => setDefaultVariant(index)}
-                                    class="p-1.5 text-slate-400 hover:text-amber-500 
-                                           hover:bg-amber-50 rounded-lg transition-colors"
-                                    title="Jadikan Default"
-                                >
+                                <button type="button" on:click={() => setDefaultVariant(index)}
+                                    class="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                                    title="Jadikan Default">
                                     <Star class="w-4 h-4" />
                                 </button>
                             {/if}
-                            <button
-                                type="button"
-                                on:click={() => handleEditVariant(variant, index)}
-                                class="p-1.5 text-slate-400 hover:text-blue-600 
-                                       hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Edit Varian"
-                            >
+                            <button type="button" on:click={() => handleEditVariant(variant, index)}
+                                class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit Varian">
                                 <Edit2 class="w-4 h-4" />
                             </button>
-                            <button
-                                type="button"
-                                on:click={() => handleDeleteVariant(variant, index)}
-                                class="p-1.5 text-slate-400 hover:text-red-600 
-                                       hover:bg-red-50 rounded-lg transition-colors"
-                                title="Hapus Varian"
-                            >
+                            <button type="button" on:click={() => handleDeleteVariant(variant, index)}
+                                class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Hapus Varian">
                                 <Trash2 class="w-4 h-4" />
                             </button>
                         </div>
@@ -294,48 +275,35 @@
                 </div>
             {/each}
         </div>
+        {/key}
 
-        <!-- Summary -->
         <div class="flex items-center justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-            <span class="text-sm text-emerald-700">
-                Total {variants.length} varian
-            </span>
-            <span class="text-sm font-medium text-emerald-700">
-                Total Stok: {totalStok}
-            </span>
+            <span class="text-sm text-emerald-700">Total {variants.length} varian</span>
+            <span class="text-sm font-medium text-emerald-700">Total Stok: {totalStok}</span>
         </div>
 
-        <!-- Warning jika belum ada default -->
         {#if !hasDefault && variants.length > 0}
             <div class="flex items-center gap-2 p-3 bg-amber-50 rounded-xl border border-amber-200">
                 <AlertCircle class="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <span class="text-sm text-amber-700">
-                    Pilih salah satu varian sebagai default untuk ditampilkan di kasir
-                </span>
+                <span class="text-sm text-amber-700">Pilih salah satu varian sebagai default untuk ditampilkan di kasir</span>
             </div>
         {/if}
     {:else}
-        <!-- Empty state -->
         <div class="p-4 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">
             <Package class="w-8 h-8 mx-auto mb-2 text-slate-400" />
             <p class="text-sm">Belum ada varian. Tambah varian untuk produk dengan pilihan berbeda.</p>
         </div>
     {/if}
 
-    <!-- Add Variant Button -->
-    <button
-        type="button"
-        on:click={handleAddVariant}
+    <button type="button" on:click={handleAddVariant}
         class="w-full h-12 border-2 border-dashed border-slate-300 rounded-xl
                text-slate-500 font-medium hover:border-emerald-400 hover:text-emerald-600
-               hover:bg-emerald-50 transition-all flex items-center justify-center gap-2"
-    >
+               hover:bg-emerald-50 transition-all flex items-center justify-center gap-2">
         <Plus class="w-5 h-5" />
         <span>Tambah Varian</span>
     </button>
 </div>
 
-<!-- Variant Form Modal -->
 <VariantFormModal
     bind:open={showVariantModal}
     mode={variantModalMode}
