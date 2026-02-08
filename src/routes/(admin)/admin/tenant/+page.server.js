@@ -1,7 +1,8 @@
 // ============================================
-// KELOLA TENANT - SERVER (Clean Version)
+// KELOLA TENANT - SERVER (FIXED - AWAIT EMAIL)
 // File: src/routes/(admin)/admin/tenant/+page.server.js
 // 
+// ✅ FIX: Semua sendEmail pakai await agar instant di Vercel
 // Email templates sudah dipisahkan ke:
 // - src/lib/email/emailTemplates.js
 // - src/lib/email/emailService.js
@@ -227,6 +228,7 @@ export const actions = {
     
     // ----------------------------------------
     // APPROVE + KIRIM EMAIL
+    // ✅ FIXED: await sendApprovalEmail
     // ----------------------------------------
     approve: async ({ request, url }) => {
         const formData = await request.formData();
@@ -267,10 +269,13 @@ export const actions = {
                 }
             }
             
-            // KIRIM EMAIL (async)
-            sendApprovalEmail(tenant, url.origin, false)
-                .then(result => console.log('📧 Approval email sent:', result))
-                .catch(err => console.error('📧 Approval email error:', err));
+            // ✅ FIXED: KIRIM EMAIL DENGAN AWAIT (instant di Vercel!)
+            try {
+                const emailResult = await sendApprovalEmail(tenant, url.origin, false);
+                console.log('📧 Approval email sent:', emailResult);
+            } catch (emailErr) {
+                console.error('📧 Approval email error:', emailErr);
+            }
             
             return { 
                 success: true, 
@@ -285,6 +290,7 @@ export const actions = {
     
     // ----------------------------------------
     // SUSPEND + KIRIM EMAIL
+    // ✅ FIXED: await sendRejectionEmail
     // ----------------------------------------
     suspend: async ({ request }) => {
         const formData = await request.formData();
@@ -301,10 +307,13 @@ export const actions = {
             await query('UPDATE tenant_users SET status = ?, updated_at = NOW() WHERE pelanggan_id = ? AND deleted_at IS NULL', 
                 ['nonaktif', id]).catch(() => {});
             
-            // KIRIM EMAIL (async)
-            sendRejectionEmail(tenant, reason, true)
-                .then(result => console.log('📧 Suspend email sent:', result))
-                .catch(err => console.error('📧 Suspend email error:', err));
+            // ✅ FIXED: KIRIM EMAIL DENGAN AWAIT (instant di Vercel!)
+            try {
+                const emailResult = await sendRejectionEmail(tenant, reason, true);
+                console.log('📧 Suspend email sent:', emailResult);
+            } catch (emailErr) {
+                console.error('📧 Suspend email error:', emailErr);
+            }
             
             return { success: true, message: 'Tenant berhasil dinonaktifkan. Email notifikasi telah dikirim.' };
             
@@ -316,6 +325,7 @@ export const actions = {
     
     // ----------------------------------------
     // ACTIVATE + KIRIM EMAIL
+    // ✅ FIXED: await sendApprovalEmail
     // ----------------------------------------
     activate: async ({ request, url }) => {
         const formData = await request.formData();
@@ -354,10 +364,13 @@ export const actions = {
                 }
             }
             
-            // KIRIM EMAIL (async)
-            sendApprovalEmail(tenant, url.origin, true)
-                .then(result => console.log('📧 Reactivate email sent:', result))
-                .catch(err => console.error('📧 Reactivate email error:', err));
+            // ✅ FIXED: KIRIM EMAIL DENGAN AWAIT (instant di Vercel!)
+            try {
+                const emailResult = await sendApprovalEmail(tenant, url.origin, true);
+                console.log('📧 Reactivate email sent:', emailResult);
+            } catch (emailErr) {
+                console.error('📧 Reactivate email error:', emailErr);
+            }
             
             return { success: true, message: 'Tenant berhasil diaktifkan! Email notifikasi telah dikirim.' };
             
@@ -369,6 +382,7 @@ export const actions = {
     
     // ----------------------------------------
     // DELETE
+    // ✅ FIXED: await sendRejectionEmail
     // ----------------------------------------
     delete: async ({ request, locals }) => {
         const formData = await request.formData();
@@ -399,8 +413,13 @@ export const actions = {
                     VALUES (?, 'archive', ?, ?, ?, 'arsip')
                 `, [id, reason, userId, tenant.status]).catch(() => {});
                 
-                // Kirim email
-                sendRejectionEmail(tenant, reason, true).catch(() => {});
+                // ✅ FIXED: KIRIM EMAIL DENGAN AWAIT
+                try {
+                    const emailResult = await sendRejectionEmail(tenant, reason, true);
+                    console.log('📧 Archive email sent:', emailResult);
+                } catch (emailErr) {
+                    console.error('📧 Archive email error:', emailErr);
+                }
                 
                 return { 
                     success: true, 

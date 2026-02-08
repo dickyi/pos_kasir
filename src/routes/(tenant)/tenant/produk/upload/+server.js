@@ -1,45 +1,217 @@
 /**
  * ============================================
- * API UPLOAD GAMBAR PRODUK
+ * API UPLOAD GAMBAR PRODUK - CLOUDINARY
  * File: src/routes/(tenant)/tenant/produk/upload/+server.js
  * ============================================
  * 
+ * ✅ UPDATED: Menggunakan Cloudinary (bukan local filesystem)
+ * 
+ * Kenapa Cloudinary?
+ * - Vercel = read-only filesystem, tidak bisa simpan file
+ * - Cloudinary gratis 25GB + auto optimize gambar
+ * - CDN global = gambar load cepat
+ * - Auto resize, compress, format WebP
+ * 
+ * Setup:
+ * 1. Daftar di https://cloudinary.com (gratis)
+ * 2. Ambil Cloud Name, API Key, API Secret dari Dashboard
+ * 3. Tambahkan ke .env / Vercel Environment Variables:
+ *    CLOUDINARY_CLOUD_NAME=your_cloud_name
+ *    CLOUDINARY_API_KEY=your_api_key
+ *    CLOUDINARY_API_SECRET=your_api_secret
+ * 
  * Endpoint: POST /tenant/produk/upload
+ * Endpoint: DELETE /tenant/produk/upload
  */
 
 import { json } from '@sveltejs/kit';
-import { writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
 import { query } from '$lib/db.js';
 import { getUserFromSession } from '$lib/auth.js';
+import { 
+    CLOUDINARY_CLOUD_NAME, 
+    CLOUDINARY_API_KEY, 
+    CLOUDINARY_API_SECRET 
+} from '$env/static/private';
 
-// Konfigurasi
-const UPLOAD_DIR = 'static/uploads/produk';
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+// ============================================
+// CONFIGURATION
+// ============================================
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (Cloudinary free limit)
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const UPLOAD_FOLDER = 'poskasir/produk'; // Folder di Cloudinary
+
+// ============================================
+// HELPER: Upload ke Cloudinary via REST API
+// (Tanpa SDK - lebih ringan untuk serverless)
+// ============================================
 
 /**
- * POST - Upload gambar produk
+ * Generate SHA-1 signature untuk Cloudinary
  */
-export async function POST({ request, cookies }) {
-    console.log('=== UPLOAD API CALLED ===');
+async function generateSignature(params, apiSecret) {
+    // Sort params alphabetically dan buat string
+    const sortedKeys = Object.keys(params).sort();
+    const signatureString = sortedKeys
+        .map(key => `${key}=${params[key]}`)
+        .join('&') + apiSecret;
+    
+    // SHA-1 hash
+    const encoder = new TextEncoder();
+    const data = encoder.encode(signatureString);
+    const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Upload file ke Cloudinary
+ * @param {File} file - File yang akan diupload
+ * @param {string} folder - Folder tujuan di Cloudinary
+ * @param {string} publicId - Custom public ID (opsional)
+ * @returns {Promise<Object>} Cloudinary response
+ */
+async function uploadToCloudinary(file, folder, publicId = null) {
+    const timestamp = Math.round(Date.now() / 1000);
+    
+    // Parameters yang perlu di-sign
+    const signParams = {
+        folder: folder,
+        timestamp: timestamp,
+        transformation: 'c_limit,w_1200,h_1200,q_auto,f_auto' // Auto optimize
+    };
+    
+    if (publicId) {
+        signParams.public_id = publicId;
+    }
+    
+    // Generate signature
+    const signature = await generateSignature(signParams, CLOUDINARY_API_SECRET);
+    
+    // Convert file ke base64
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+    const dataUri = `data:${file.type};base64,${base64}`;
+    
+    // Build form data untuk Cloudinary API
+    const formData = new FormData();
+    formData.append('file', dataUri);
+    formData.append('folder', folder);
+    formData.append('timestamp', timestamp.toString());
+    formData.append('transformation', 'c_limit,w_1200,h_1200,q_auto,f_auto');
+    formData.append('signature', signature);
+    formData.append('api_key', CLOUDINARY_API_KEY);
+    
+    if (publicId) {
+        formData.append('public_id', publicId);
+    }
+    
+    // Upload ke Cloudinary
+    const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+            method: 'POST',
+            body: formData
+        }
+    );
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Cloudinary upload failed: ${response.status}`);
+    }
+    
+    return await response.json();
+}
+
+/**
+ * Delete file dari Cloudinary
+ * @param {string} publicId - Public ID file yang akan dihapus
+ * @returns {Promise<Object>} Cloudinary response
+ */
+async function deleteFromCloudinary(publicId) {
+    const timestamp = Math.round(Date.now() / 1000);
+    
+    const signParams = {
+        public_id: publicId,
+        timestamp: timestamp
+    };
+    
+    const signature = await generateSignature(signParams, CLOUDINARY_API_SECRET);
+    
+    const formData = new FormData();
+    formData.append('public_id', publicId);
+    formData.append('timestamp', timestamp.toString());
+    formData.append('signature', signature);
+    formData.append('api_key', CLOUDINARY_API_KEY);
+    
+    const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/destroy`,
+        {
+            method: 'POST',
+            body: formData
+        }
+    );
+    
+    return await response.json();
+}
+
+/**
+ * Extract public_id dari Cloudinary URL
+ * contoh: https://res.cloudinary.com/xxx/image/upload/v123/poskasir/produk/file.jpg
+ * → poskasir/produk/file
+ */
+function extractPublicId(cloudinaryUrl) {
+    if (!cloudinaryUrl || !cloudinaryUrl.includes('cloudinary.com')) {
+        return null;
+    }
     
     try {
+        const parts = cloudinaryUrl.split('/upload/');
+        if (parts.length < 2) return null;
+        
+        let path = parts[1];
+        // Remove version prefix (v12345/)
+        path = path.replace(/^v\d+\//, '');
+        // Remove file extension
+        path = path.replace(/\.[^/.]+$/, '');
+        
+        return path;
+    } catch (e) {
+        return null;
+    }
+}
+
+// ============================================
+// POST - Upload gambar produk
+// ============================================
+
+export async function POST({ request, cookies }) {
+    console.log('=== CLOUDINARY UPLOAD API CALLED ===');
+    
+    try {
+        // Auth check
         const user = getUserFromSession(cookies);
         
         if (!user || !user.pelanggan_id) {
-            console.log('Upload failed: Unauthorized');
             return json({ success: false, error: 'Unauthorized - Silakan login ulang' }, { status: 401 });
         }
 
-        console.log('User:', user.pelanggan_id);
+        // Check Cloudinary config
+        if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+            console.error('Cloudinary not configured!');
+            return json({ 
+                success: false, 
+                error: 'Cloud storage belum dikonfigurasi. Hubungi administrator.' 
+            }, { status: 500 });
+        }
 
+        // Parse form data
         let formData;
         try {
             formData = await request.formData();
         } catch (e) {
-            console.error('FormData parse error:', e);
             return json({ success: false, error: 'Gagal membaca data form' }, { status: 400 });
         }
 
@@ -65,52 +237,24 @@ export async function POST({ request, cookies }) {
         if (file.size > MAX_FILE_SIZE) {
             return json({ 
                 success: false, 
-                error: `Ukuran file (${(file.size / 1024 / 1024).toFixed(2)}MB) melebihi batas 100MB` 
+                error: `Ukuran file (${(file.size / 1024 / 1024).toFixed(2)}MB) melebihi batas 10MB` 
             }, { status: 400 });
         }
 
-        // Buat direktori jika belum ada
-        const uploadPath = path.join(process.cwd(), UPLOAD_DIR);
-        console.log('Upload path:', uploadPath);
-        
-        try {
-            if (!existsSync(uploadPath)) {
-                console.log('Creating upload directory...');
-                await mkdir(uploadPath, { recursive: true });
-            }
-        } catch (e) {
-            console.error('Failed to create directory:', e);
-            return json({ 
-                success: false, 
-                error: 'Gagal membuat folder upload. Pastikan folder static/uploads/produk ada.' 
-            }, { status: 500 });
-        }
-
-        // Generate nama file unik
-        const ext = path.extname(file.name).toLowerCase() || '.jpg';
+        // Generate public ID unik
         const timestamp = Date.now();
         const randomStr = Math.random().toString(36).substring(2, 8);
-        const fileName = `${user.pelanggan_id}_${timestamp}_${randomStr}${ext}`;
-        const filePath = path.join(uploadPath, fileName);
+        const publicId = `${user.pelanggan_id}_${timestamp}_${randomStr}`;
 
-        console.log('Saving to:', filePath);
+        console.log('Uploading to Cloudinary...');
 
-        // Convert file to buffer dan simpan
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            await writeFile(filePath, buffer);
-            console.log('File saved successfully');
-        } catch (e) {
-            console.error('Failed to write file:', e);
-            return json({ 
-                success: false, 
-                error: 'Gagal menyimpan file: ' + e.message 
-            }, { status: 500 });
-        }
+        // Upload ke Cloudinary
+        const cloudinaryResult = await uploadToCloudinary(file, UPLOAD_FOLDER, publicId);
+        
+        console.log('Cloudinary upload success:', cloudinaryResult.secure_url);
 
-        // URL untuk akses gambar
-        const imageUrl = `/uploads/produk/${fileName}`;
+        // URL gambar dari Cloudinary (sudah otomatis optimize)
+        const imageUrl = cloudinaryResult.secure_url;
 
         // Jika ada produk_id, update database
         if (produkId) {
@@ -121,6 +265,20 @@ export async function POST({ request, cookies }) {
                 );
 
                 if (existing && existing.length > 0) {
+                    // Hapus gambar lama dari Cloudinary (jika ada)
+                    if (existing[0].gambar) {
+                        const oldPublicId = extractPublicId(existing[0].gambar);
+                        if (oldPublicId) {
+                            try {
+                                await deleteFromCloudinary(oldPublicId);
+                                console.log('Old image deleted from Cloudinary');
+                            } catch (e) {
+                                console.log('Failed to delete old image (ignored):', e.message);
+                            }
+                        }
+                    }
+                    
+                    // Update URL gambar baru di database
                     await query(
                         'UPDATE produk SET gambar = ?, updated_at = NOW() WHERE id = ?',
                         [imageUrl, produkId]
@@ -129,6 +287,7 @@ export async function POST({ request, cookies }) {
                 }
             } catch (e) {
                 console.error('Database update error:', e);
+                // Gambar sudah terupload, hanya DB update gagal
             }
         }
 
@@ -137,9 +296,13 @@ export async function POST({ request, cookies }) {
             message: 'Gambar berhasil diupload',
             data: {
                 url: imageUrl,
-                fileName: fileName,
+                publicId: cloudinaryResult.public_id,
+                fileName: file.name,
                 size: file.size,
-                type: file.type
+                type: file.type,
+                width: cloudinaryResult.width,
+                height: cloudinaryResult.height,
+                format: cloudinaryResult.format
             }
         });
 
@@ -147,14 +310,15 @@ export async function POST({ request, cookies }) {
         console.error('Upload error:', error);
         return json({ 
             success: false, 
-            error: 'Terjadi kesalahan: ' + (error.message || 'Unknown error')
+            error: 'Gagal upload gambar: ' + (error.message || 'Unknown error')
         }, { status: 500 });
     }
 }
 
-/**
- * DELETE - Hapus gambar produk
- */
+// ============================================
+// DELETE - Hapus gambar produk
+// ============================================
+
 export async function DELETE({ request, cookies }) {
     try {
         const user = getUserFromSession(cookies);
@@ -169,6 +333,26 @@ export async function DELETE({ request, cookies }) {
             return json({ success: false, error: 'Produk ID diperlukan' }, { status: 400 });
         }
 
+        // Ambil URL gambar lama
+        const existing = await query(
+            'SELECT gambar FROM produk WHERE id = ? AND pelanggan_id = ?',
+            [produk_id, user.pelanggan_id]
+        );
+
+        if (existing && existing.length > 0 && existing[0].gambar) {
+            // Hapus dari Cloudinary
+            const publicId = extractPublicId(existing[0].gambar);
+            if (publicId) {
+                try {
+                    await deleteFromCloudinary(publicId);
+                    console.log('Image deleted from Cloudinary:', publicId);
+                } catch (e) {
+                    console.log('Failed to delete from Cloudinary (ignored):', e.message);
+                }
+            }
+        }
+
+        // Update database
         await query(
             'UPDATE produk SET gambar = NULL, updated_at = NOW() WHERE id = ? AND pelanggan_id = ?',
             [produk_id, user.pelanggan_id]
