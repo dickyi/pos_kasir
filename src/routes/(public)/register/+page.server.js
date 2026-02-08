@@ -513,13 +513,17 @@ export const actions = {
                 alamat: alamatLengkap
             };
             
-            sendRegistrationEmail(tenantData, url.origin)
-                .then(results => {
-                    console.log('📧 Registration email sent:', results);
-                })
-                .catch(err => {
-                    console.error('📧 Registration email error:', err);
-                });
+          // ============================================
+            // KIRIM EMAIL (FIXED - AWAIT)
+            // ✅ Dengan await, Vercel tunggu sampai email selesai
+            // ============================================
+            try {
+                const emailResults = await sendRegistrationEmail(tenantData, url.origin);
+                console.log('📧 Registration email sent:', emailResults);
+            } catch (emailErr) {
+                // Email gagal tapi registrasi tetap sukses
+                console.error('📧 Registration email error:', emailErr);
+            }
 
             // ============================================
             // RETURN SUCCESS
