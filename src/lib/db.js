@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 
 // Konfigurasi koneksi database
+// Updated: 2026-02-08
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
