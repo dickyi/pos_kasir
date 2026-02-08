@@ -1,15 +1,9 @@
 <!--
-    ProductFormModal.svelte - Modal Form Produk dengan Varian + Merk Integration
+    ProductFormModal.svelte - Modal Form Produk (FIXED v2 - Cloudinary Cleanup)
     ============================================
-    Form produk dengan fitur:
-    - Label di atas setiap field
-    - Format rupiah otomatis (pemisah ribuan)
-    - Upload gambar dengan inisial placeholder
-    - Toggle Produk Favorit
-    - Toggle Atur Harga Modal dan Barcode
-    - Kelola Stok
-    - Tambah Varian dengan Atribut, Gambar, Berat
-    - Merk (conditional - hanya muncul jika menu merk aktif)
+    ✅ FIX: Kirim old_image_url saat upload gambar baru
+    ✅ FIX: Hapus gambar dari Cloudinary saat remove
+    ✅ FIX: Max file size 10MB (bukan 100MB)
 -->
 <script>
     import { enhance } from '$app/forms';
@@ -26,24 +20,21 @@
     const dispatch = createEventDispatcher();
 
     export let open = false;
-    export let mode = 'add'; // 'add' | 'edit'
+    export let mode = 'add';
     export let produk = null;
     export let kategoriList = [];
     export let merkList = [];
-    export let showMerk = false; // NEW: Prop untuk kontrol tampilan field Merk
+    export let showMerk = false;
 
-    // Form state
     let isSubmitting = false;
     let isUploading = false;
     let uploadError = '';
     let previewUrl = '';
     let fileInput;
 
-    // Toggle sections
     let showHargaModal = false;
     let showStok = false;
 
-    // Form data
     let formData = {
         id: '',
         nama_produk: '',
@@ -60,14 +51,10 @@
         has_variant: false
     };
 
-    // Display values untuk format rupiah
     let displayHargaJual = '';
     let displayHargaBeli = '';
-
-    // Variant data
     let variants = [];
 
-    // Satuan options
     const satuanOptions = [
         { value: 'pcs', label: 'Pcs' },
         { value: 'porsi', label: 'Porsi' },
@@ -82,62 +69,35 @@
         { value: 'lusin', label: 'Lusin' }
     ];
 
-    // Format number to rupiah display
     function formatToRupiah(num) {
         if (!num || num === 0) return '';
         const intNum = Math.round(Number(num));
         return new Intl.NumberFormat('id-ID').format(intNum);
     }
 
-    // Parse dari berbagai format ke integer
     function parseToNumber(value) {
         if (value === null || value === undefined || value === '') return 0;
-        
-        if (typeof value === 'number') {
-            return Math.round(value);
-        }
-        
+        if (typeof value === 'number') return Math.round(value);
         let str = value.toString().trim();
-        
-        // Format DB decimal: "15000.00"
-        if (/^\d+\.\d{2}$/.test(str)) {
-            return Math.round(parseFloat(str));
-        }
-        
-        // Format rupiah Indonesia: "15.000" atau "1.500.000"
-        if (/^\d{1,3}(\.\d{3})+$/.test(str)) {
-            return parseInt(str.replace(/\./g, '')) || 0;
-        }
-        
-        // Format dengan koma: "15,000"
-        if (/^\d{1,3}(,\d{3})+$/.test(str)) {
-            return parseInt(str.replace(/,/g, '')) || 0;
-        }
-        
-        // Pure number string: "15000"
-        if (/^\d+$/.test(str)) {
-            return parseInt(str) || 0;
-        }
-        
-        // Fallback
+        if (/^\d+\.\d{2}$/.test(str)) return Math.round(parseFloat(str));
+        if (/^\d{1,3}(\.\d{3})+$/.test(str)) return parseInt(str.replace(/\./g, '')) || 0;
+        if (/^\d{1,3}(,\d{3})+$/.test(str)) return parseInt(str.replace(/,/g, '')) || 0;
+        if (/^\d+$/.test(str)) return parseInt(str) || 0;
         return parseInt(str.replace(/\D/g, '')) || 0;
     }
 
-    // Handle harga jual input
     function handleHargaJualInput(e) {
         let value = e.target.value.replace(/\D/g, '');
         formData.harga_jual = parseInt(value) || 0;
         displayHargaJual = formatToRupiah(formData.harga_jual);
     }
 
-    // Handle harga beli input
     function handleHargaBeliInput(e) {
         let value = e.target.value.replace(/\D/g, '');
         formData.harga_beli = parseInt(value) || 0;
         displayHargaBeli = formatToRupiah(formData.harga_beli);
     }
 
-    // Reset form function
     function resetForm() {
         uploadError = '';
         if (mode === 'edit' && produk) {
@@ -164,19 +124,10 @@
             variants = produk.variants || [];
         } else {
             formData = {
-                id: '',
-                nama_produk: '',
-                kategori_id: '',
-                merk_id: '',
-                harga_beli: 0,
-                harga_jual: 0,
-                barcode: '',
-                stok: 0,
-                satuan: 'pcs',
-                status: 'aktif',
-                gambar: '',
-                is_favorite: false,
-                has_variant: false
+                id: '', nama_produk: '', kategori_id: '', merk_id: '',
+                harga_beli: 0, harga_jual: 0, barcode: '', stok: 0,
+                satuan: 'pcs', status: 'aktif', gambar: '',
+                is_favorite: false, has_variant: false
             };
             displayHargaJual = '';
             displayHargaBeli = '';
@@ -187,17 +138,12 @@
         }
     }
 
-    // Reset form saat modal dibuka
-    $: if (open) {
-        resetForm();
-    }
+    $: if (open) resetForm();
 
-    // Generate inisial dari nama produk
     $: initials = formData.nama_produk
         ? formData.nama_produk.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2)
         : 'NP';
 
-    // Generate kode produk sementara untuk varian
     $: tempKodeProduk = formData.id || `PRD-${Date.now().toString().slice(-6)}`;
 
     function close() {
@@ -205,7 +151,9 @@
         dispatch('close');
     }
 
-    // Handle file selection
+    // ============================================
+    // ✅ FIXED: Upload gambar dengan hapus gambar lama
+    // ============================================
     async function handleFileSelect(event) {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -216,8 +164,8 @@
             return;
         }
 
-        if (file.size > 100 * 1024 * 1024) {
-            uploadError = 'Ukuran file maksimal 100MB';
+        if (file.size > 10 * 1024 * 1024) {  // ✅ FIX: 10MB bukan 100MB
+            uploadError = 'Ukuran file maksimal 10MB';
             return;
         }
 
@@ -225,17 +173,22 @@
         isUploading = true;
 
         try {
+            // Preview langsung
             const reader = new FileReader();
-            reader.onload = (e) => {
-                previewUrl = e.target.result;
-            };
+            reader.onload = (e) => { previewUrl = e.target.result; };
             reader.readAsDataURL(file);
 
             const uploadData = new FormData();
             uploadData.append('file', file);
+            uploadData.append('type', 'product'); // ✅ Tipe product
             
             if (mode === 'edit' && formData.id) {
                 uploadData.append('produk_id', formData.id);
+            }
+
+            // ✅ FIX: Kirim URL gambar lama agar dihapus dari Cloudinary
+            if (formData.gambar && formData.gambar.includes('cloudinary.com')) {
+                uploadData.append('old_image_url', formData.gambar);
             }
 
             const response = await fetch('/tenant/produk/upload', {
@@ -248,6 +201,7 @@
             if (result.success) {
                 formData.gambar = result.data.url;
                 previewUrl = result.data.url;
+                console.log('✅ Product image uploaded:', result.data.url);
             } else {
                 uploadError = result.error || 'Gagal upload gambar';
                 previewUrl = formData.gambar || '';
@@ -261,14 +215,20 @@
         }
     }
 
+    // ✅ FIXED: Hapus gambar dari Cloudinary saat remove
     async function removeImage() {
-        if (mode === 'edit' && formData.id && formData.gambar) {
+        // Hapus dari Cloudinary
+        if (formData.gambar && formData.gambar.includes('cloudinary.com')) {
             try {
                 await fetch('/tenant/produk/upload', {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ produk_id: formData.id })
+                    body: JSON.stringify({ 
+                        produk_id: (mode === 'edit' && formData.id) ? formData.id : null,
+                        image_url: formData.gambar 
+                    })
                 });
+                console.log('🗑️ Product image deleted from Cloudinary');
             } catch (e) {
                 console.error('Delete image error:', e);
             }
@@ -279,23 +239,19 @@
         if (fileInput) fileInput.value = '';
     }
 
-    // Handle variant changes
     function handleVariantChange(event) {
         variants = event.detail;
         formData.has_variant = variants.length > 0;
     }
 
-    // Toggle favorite
     function toggleFavorite() {
         formData.is_favorite = !formData.is_favorite;
     }
 
-    // Handle form submit
     function handleSubmit() {
         isSubmitting = true;
         return async ({ result, update }) => {
             isSubmitting = false;
-            
             if (result.type === 'success') {
                 close();
                 await invalidateAll();
@@ -333,11 +289,8 @@
     >
         <!-- Header -->
         <div class="flex items-center gap-3 p-4 border-b border-slate-200 flex-shrink-0">
-            <button
-                type="button"
-                on:click={close}
-                class="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-            >
+            <button type="button" on:click={close}
+                class="p-1 text-slate-400 hover:text-slate-600 transition-colors">
                 <X class="w-5 h-5" />
             </button>
             <h2 class="text-lg font-semibold text-slate-800">
@@ -366,18 +319,12 @@
             <div class="flex justify-center py-6">
                 <div class="relative">
                     {#if previewUrl}
-                        <img 
-                            src={previewUrl} 
-                            alt="Preview"
-                            class="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200"
-                        />
-                        <button
-                            type="button"
-                            on:click={removeImage}
+                        <img src={previewUrl} alt="Preview"
+                            class="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200" />
+                        <button type="button" on:click={removeImage}
                             class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white 
                                    rounded-full flex items-center justify-center
-                                   hover:bg-red-600 transition-colors shadow-lg"
-                        >
+                                   hover:bg-red-600 transition-colors shadow-lg">
                             <X class="w-3.5 h-3.5" />
                         </button>
                     {:else}
@@ -391,21 +338,13 @@
                         </div>
                     {/if}
                     
-                    <!-- Camera Button -->
-                    <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        on:change={handleFileSelect}
-                        bind:this={fileInput}
-                        class="hidden"
-                        id="gambar-input-produk"
-                    />
-                    <label
-                        for="gambar-input-produk"
+                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                        on:change={handleFileSelect} bind:this={fileInput}
+                        class="hidden" id="gambar-input-produk" />
+                    <label for="gambar-input-produk"
                         class="absolute -bottom-1 -right-1 w-8 h-8 bg-white border-2 border-slate-200
                                rounded-full flex items-center justify-center cursor-pointer
-                               hover:bg-slate-50 transition-colors shadow-sm"
-                    >
+                               hover:bg-slate-50 transition-colors shadow-sm">
                         <Camera class="w-4 h-4 text-slate-500" />
                     </label>
                 </div>
@@ -420,61 +359,39 @@
 
             <!-- Basic Info -->
             <div class="px-4 space-y-4">
-                <!-- Nama Produk -->
                 <div class="space-y-1.5">
                     <label for="nama_produk" class="block text-sm font-medium text-slate-700">
                         Nama Produk <span class="text-red-500">*</span>
                     </label>
-                    <input
-                        type="text"
-                        id="nama_produk"
-                        name="nama_produk"
-                        bind:value={formData.nama_produk}
-                        required
-                        autocomplete="off"
+                    <input type="text" id="nama_produk" name="nama_produk"
+                        bind:value={formData.nama_produk} required autocomplete="off"
                         placeholder="Contoh: Ayam Geprek Original"
                         class="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                placeholder:text-slate-400 focus:outline-none focus:border-emerald-500
-                               focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all"
-                    />
+                               focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all" />
                 </div>
 
-                <!-- Harga Jual -->
                 <div class="space-y-1.5">
                     <label for="harga_jual_display" class="block text-sm font-medium text-slate-700">
                         Harga Jual <span class="text-red-500">*</span>
                     </label>
                     <div class="relative">
                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-medium pointer-events-none">Rp</span>
-                        <input
-                            type="text"
-                            id="harga_jual_display"
-                            value={displayHargaJual}
-                            on:input={handleHargaJualInput}
-                            autocomplete="off"
-                            inputmode="numeric"
-                            placeholder="0"
+                        <input type="text" id="harga_jual_display" value={displayHargaJual}
+                            on:input={handleHargaJualInput} autocomplete="off" inputmode="numeric" placeholder="0"
                             class="w-full h-12 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                    placeholder:text-slate-400 focus:outline-none focus:border-emerald-500
-                                   focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all"
-                        />
+                                   focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all" />
                     </div>
                 </div>
 
-                <!-- Kategori -->
                 <div class="space-y-1.5">
-                    <label for="kategori_id" class="block text-sm font-medium text-slate-700">
-                        Kategori
-                    </label>
+                    <label for="kategori_id" class="block text-sm font-medium text-slate-700">Kategori</label>
                     <div class="relative">
-                        <select
-                            id="kategori_id"
-                            name="kategori_id"
-                            bind:value={formData.kategori_id}
+                        <select id="kategori_id" name="kategori_id" bind:value={formData.kategori_id}
                             class="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                    focus:outline-none focus:border-emerald-500 focus:ring-2 
-                                   focus:ring-emerald-500/20 focus:bg-white transition-all appearance-none cursor-pointer"
-                        >
+                                   focus:ring-emerald-500/20 focus:bg-white transition-all appearance-none cursor-pointer">
                             <option value="">Pilih Kategori</option>
                             {#each kategoriList as kat}
                                 <option value={kat.id}>{kat.nama_kategori}</option>
@@ -484,21 +401,14 @@
                     </div>
                 </div>
 
-                <!-- Merk / Brand (Conditional - hanya muncul jika showMerk = true) -->
                 {#if showMerk && merkList && merkList.length > 0}
                     <div class="space-y-1.5">
-                        <label for="merk_id" class="block text-sm font-medium text-slate-700">
-                            Merk / Brand
-                        </label>
+                        <label for="merk_id" class="block text-sm font-medium text-slate-700">Merk / Brand</label>
                         <div class="relative">
-                            <select
-                                id="merk_id"
-                                name="merk_id"
-                                bind:value={formData.merk_id}
+                            <select id="merk_id" name="merk_id" bind:value={formData.merk_id}
                                 class="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                        focus:outline-none focus:border-emerald-500 focus:ring-2 
-                                       focus:ring-emerald-500/20 focus:bg-white transition-all appearance-none cursor-pointer"
-                            >
+                                       focus:ring-emerald-500/20 focus:bg-white transition-all appearance-none cursor-pointer">
                                 <option value="">Pilih Merk</option>
                                 {#each merkList as merk}
                                     <option value={merk.id}>{merk.nama_merk}</option>
@@ -510,102 +420,64 @@
                 {/if}
             </div>
 
-            <!-- Divider -->
             <div class="h-2 bg-slate-100 my-4"></div>
 
-            <!-- Produk Favorit Toggle -->
+            <!-- Produk Favorit -->
             <div class="px-4 py-3">
                 <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="font-semibold text-slate-800">Produk Favorit</span>
-                    </div>
-                    <button
-                        type="button"
-                        on:click={toggleFavorite}
+                    <span class="font-semibold text-slate-800">Produk Favorit</span>
+                    <button type="button" on:click={toggleFavorite}
                         class="w-12 h-7 rounded-full transition-colors relative
                                {formData.is_favorite ? 'bg-emerald-500' : 'bg-slate-200'}"
-                        role="switch"
-                        aria-checked={formData.is_favorite}
-                    >
-                        <div 
-                            class="absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all
-                                   {formData.is_favorite ? 'left-6' : 'left-1'}"
-                        ></div>
+                        role="switch" aria-checked={formData.is_favorite}>
+                        <div class="absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all
+                                   {formData.is_favorite ? 'left-6' : 'left-1'}"></div>
                     </button>
                 </div>
-                <p class="text-xs text-slate-500 mt-1">
-                    Tampilkan produk di kategori terdepan.
-                </p>
+                <p class="text-xs text-slate-500 mt-1">Tampilkan produk di kategori terdepan.</p>
             </div>
 
-            <!-- Divider -->
             <div class="h-2 bg-slate-100"></div>
 
-            <!-- Atur Harga Modal dan Barcode -->
+            <!-- Harga Modal & Barcode -->
             <div class="px-4 py-3">
                 <div class="flex items-center justify-between">
                     <span class="font-semibold text-slate-800">Atur Harga Modal dan Barcode</span>
-                    <button
-                        type="button"
-                        on:click={() => showHargaModal = !showHargaModal}
+                    <button type="button" on:click={() => showHargaModal = !showHargaModal}
                         class="w-12 h-7 rounded-full transition-colors relative
                                {showHargaModal ? 'bg-emerald-500' : 'bg-slate-200'}"
-                        role="switch"
-                        aria-checked={showHargaModal}
-                    >
-                        <div 
-                            class="absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all
-                                   {showHargaModal ? 'left-6' : 'left-1'}"
-                        ></div>
+                        role="switch" aria-checked={showHargaModal}>
+                        <div class="absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all
+                                   {showHargaModal ? 'left-6' : 'left-1'}"></div>
                     </button>
                 </div>
 
                 {#if showHargaModal}
                     <div class="mt-4 space-y-4" transition:slide={{ duration: 150 }}>
-                        <!-- Harga Modal -->
                         <div class="space-y-1.5">
-                            <label for="harga_beli_display" class="block text-sm font-medium text-slate-700">
-                                Harga Modal
-                            </label>
+                            <label for="harga_beli_display" class="block text-sm font-medium text-slate-700">Harga Modal</label>
                             <div class="relative">
                                 <span class="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-medium pointer-events-none">Rp</span>
-                                <input
-                                    type="text"
-                                    id="harga_beli_display"
-                                    value={displayHargaBeli}
-                                    on:input={handleHargaBeliInput}
-                                    autocomplete="off"
-                                    inputmode="numeric"
-                                    placeholder="0"
+                                <input type="text" id="harga_beli_display" value={displayHargaBeli}
+                                    on:input={handleHargaBeliInput} autocomplete="off" inputmode="numeric" placeholder="0"
                                     class="w-full h-12 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                            placeholder:text-slate-400 focus:outline-none focus:border-emerald-500
-                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all"
-                                />
+                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all" />
                             </div>
                         </div>
 
-                        <!-- Barcode -->
                         <div class="space-y-1.5">
-                            <label for="barcode" class="block text-sm font-medium text-slate-700">
-                                Kode Produk / Barcode
-                            </label>
+                            <label for="barcode" class="block text-sm font-medium text-slate-700">Kode Produk / Barcode</label>
                             <div class="relative">
-                                <input
-                                    type="text"
-                                    id="barcode"
-                                    name="barcode"
-                                    bind:value={formData.barcode}
-                                    autocomplete="off"
-                                    placeholder="Scan atau ketik barcode"
+                                <input type="text" id="barcode" name="barcode" bind:value={formData.barcode}
+                                    autocomplete="off" placeholder="Scan atau ketik barcode"
                                     class="w-full h-12 px-4 pr-12 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                            placeholder:text-slate-400 focus:outline-none focus:border-emerald-500
-                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all"
-                                />
+                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all" />
                                 <Barcode class="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                             </div>
                         </div>
 
-                        <!-- Margin Info -->
                         {#if formData.harga_jual > 0 && formData.harga_beli > 0}
                             {@const margin = formData.harga_jual - formData.harga_beli}
                             {@const marginPercent = ((margin / formData.harga_beli) * 100).toFixed(1)}
@@ -620,17 +492,13 @@
                 {/if}
             </div>
 
-            <!-- Divider -->
             <div class="h-2 bg-slate-100"></div>
 
-            <!-- Kelola Stok (jika tidak punya varian) -->
+            <!-- Kelola Stok -->
             {#if !formData.has_variant}
                 <div class="px-4 py-3">
-                    <button
-                        type="button"
-                        on:click={() => showStok = !showStok}
-                        class="w-full flex items-center justify-between"
-                    >
+                    <button type="button" on:click={() => showStok = !showStok}
+                        class="w-full flex items-center justify-between">
                         <span class="font-semibold text-slate-800">Kelola Stok</span>
                         <div class="flex items-center gap-2 text-slate-400">
                             <span class="text-sm">{showStok ? 'Stok Aktif' : 'Stok Tidak Aktif'}</span>
@@ -641,35 +509,19 @@
                     {#if showStok}
                         <div class="mt-4 grid grid-cols-2 gap-3" transition:slide={{ duration: 150 }}>
                             <div class="space-y-1.5">
-                                <label for="stok" class="block text-sm font-medium text-slate-700">
-                                    Stok Awal
-                                </label>
-                                <input
-                                    type="number"
-                                    id="stok"
-                                    name="stok"
-                                    bind:value={formData.stok}
-                                    min="0"
-                                    autocomplete="off"
-                                    inputmode="numeric"
-                                    placeholder="0"
+                                <label for="stok" class="block text-sm font-medium text-slate-700">Stok Awal</label>
+                                <input type="number" id="stok" name="stok" bind:value={formData.stok}
+                                    min="0" autocomplete="off" inputmode="numeric" placeholder="0"
                                     class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                            placeholder:text-slate-400 focus:outline-none focus:border-emerald-500
-                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all"
-                                />
+                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all" />
                             </div>
                             <div class="space-y-1.5">
-                                <label for="satuan" class="block text-sm font-medium text-slate-700">
-                                    Satuan
-                                </label>
-                                <select
-                                    id="satuan"
-                                    name="satuan"
-                                    bind:value={formData.satuan}
+                                <label for="satuan" class="block text-sm font-medium text-slate-700">Satuan</label>
+                                <select id="satuan" name="satuan" bind:value={formData.satuan}
                                     class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm
                                            focus:outline-none focus:border-emerald-500
-                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all"
-                                >
+                                           focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all">
                                     {#each satuanOptions as opt}
                                         <option value={opt.value}>{opt.label}</option>
                                     {/each}
@@ -678,12 +530,10 @@
                         </div>
                     {/if}
                 </div>
-
-                <!-- Divider -->
                 <div class="h-2 bg-slate-100"></div>
             {/if}
 
-            <!-- Section Varian -->
+            <!-- Varian -->
             <div class="px-4 py-4">
                 <h3 class="font-semibold text-slate-800 mb-4">Varian Produk</h3>
                 <VariantSection 
@@ -693,33 +543,27 @@
                 />
             </div>
 
-            <!-- Delete Button (edit mode only) -->
             {#if mode === 'edit'}
                 <div class="px-4 py-4 border-t border-slate-100">
-                    <button
-                        type="button"
+                    <button type="button"
                         class="w-full flex items-center justify-center gap-2 py-3 text-red-600
-                               hover:bg-red-50 rounded-xl transition-colors"
-                    >
+                               hover:bg-red-50 rounded-xl transition-colors">
                         <Trash2 class="w-4 h-4" />
                         <span class="font-medium">Hapus Produk</span>
                     </button>
                 </div>
             {/if}
 
-            <!-- Spacer -->
             <div class="h-24"></div>
 
-            <!-- Fixed Footer -->
+            <!-- Footer -->
             <div class="fixed bottom-0 left-0 right-0 sm:absolute sm:bottom-0 sm:left-0 sm:right-0
                         p-4 bg-white border-t border-slate-200 sm:rounded-b-2xl z-10">
-                <button
-                    type="submit"
+                <button type="submit"
                     disabled={isSubmitting || !formData.nama_produk || formData.harga_jual <= 0}
                     class="w-full h-12 bg-emerald-600 text-white rounded-xl font-semibold
                            hover:bg-emerald-700 transition-colors disabled:opacity-50 
-                           disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
+                           disabled:cursor-not-allowed flex items-center justify-center gap-2">
                     {#if isSubmitting}
                         <Loader2 class="w-5 h-5 animate-spin" />
                     {/if}
