@@ -1,9 +1,12 @@
 <!--
-    ProductFormModal.svelte - Modal Form Produk (FIXED v2 - Cloudinary Cleanup)
+    ProductFormModal.svelte - Modal Form Produk (FIXED v3 - Upload Safety)
     ============================================
-    ✅ FIX: Kirim old_image_url saat upload gambar baru
-    ✅ FIX: Hapus gambar dari Cloudinary saat remove
-    ✅ FIX: Max file size 10MB (bukan 100MB)
+    ✅ FIX v2: Kirim old_image_url saat upload gambar baru
+    ✅ FIX v2: Hapus gambar dari Cloudinary saat remove
+    ✅ FIX v2: Max file size 10MB (bukan 100MB)
+    ✅ FIX v3: Disable tombol Simpan saat upload berjalan
+    ✅ FIX v3: Upload status indicator (loading/sukses/error)
+    ✅ FIX v3: Prevent submit saat gambar sedang di-upload
 -->
 <script>
     import { enhance } from '$app/forms';
@@ -13,7 +16,7 @@
     import { 
         X, Package, Loader2, Upload, Image as ImageIcon, 
         Camera, AlertCircle, ChevronRight, ChevronDown, Barcode,
-        Star, Trash2
+        Star, Trash2, CheckCircle
     } from 'lucide-svelte';
     import VariantSection from '../VariantSection.svelte';
 
@@ -27,8 +30,9 @@
     export let showMerk = false;
 
     let isSubmitting = false;
-    let isUploading = false;
+    let isUploading = false;       // ✅ v3: Track upload state
     let uploadError = '';
+    let uploadSuccess = false;     // ✅ v3: Track upload success
     let previewUrl = '';
     let fileInput;
 
@@ -100,6 +104,9 @@
 
     function resetForm() {
         uploadError = '';
+        uploadSuccess = false;  // ✅ v3: Reset upload success
+        isUploading = false;    // ✅ v3: Reset upload state
+        
         if (mode === 'edit' && produk) {
             formData = {
                 id: produk.id,
@@ -146,13 +153,16 @@
 
     $: tempKodeProduk = formData.id || `PRD-${Date.now().toString().slice(-6)}`;
 
+    // ✅ v3: Computed - apakah form bisa di-submit
+    $: canSubmit = formData.nama_produk && formData.harga_jual > 0 && !isUploading && !isSubmitting;
+
     function close() {
         open = false;
         dispatch('close');
     }
 
     // ============================================
-    // ✅ FIXED: Upload gambar dengan hapus gambar lama
+    // ✅ FIXED v3: Upload gambar dengan status tracking
     // ============================================
     async function handleFileSelect(event) {
         const file = event.target.files?.[0];
@@ -164,13 +174,14 @@
             return;
         }
 
-        if (file.size > 10 * 1024 * 1024) {  // ✅ FIX: 10MB bukan 100MB
+        if (file.size > 10 * 1024 * 1024) {
             uploadError = 'Ukuran file maksimal 10MB';
             return;
         }
 
         uploadError = '';
-        isUploading = true;
+        uploadSuccess = false;
+        isUploading = true;  // ✅ v3: Mulai upload → disable tombol Simpan
 
         try {
             // Preview langsung
@@ -180,13 +191,13 @@
 
             const uploadData = new FormData();
             uploadData.append('file', file);
-            uploadData.append('type', 'product'); // ✅ Tipe product
+            uploadData.append('type', 'product');
             
             if (mode === 'edit' && formData.id) {
                 uploadData.append('produk_id', formData.id);
             }
 
-            // ✅ FIX: Kirim URL gambar lama agar dihapus dari Cloudinary
+            // Kirim URL gambar lama agar dihapus dari Cloudinary
             if (formData.gambar && formData.gambar.includes('cloudinary.com')) {
                 uploadData.append('old_image_url', formData.gambar);
             }
@@ -202,6 +213,10 @@
                 formData.gambar = result.data.url;
                 previewUrl = result.data.url;
                 console.log('✅ Product image uploaded:', result.data.url);
+                
+                // ✅ v3: Tampilkan sukses sebentar
+                uploadSuccess = true;
+                setTimeout(() => { uploadSuccess = false; }, 2000);
             } else {
                 uploadError = result.error || 'Gagal upload gambar';
                 previewUrl = formData.gambar || '';
@@ -211,13 +226,12 @@
             uploadError = 'Gagal upload gambar';
             previewUrl = formData.gambar || '';
         } finally {
-            isUploading = false;
+            isUploading = false;  // ✅ v3: Selesai upload → enable tombol Simpan
         }
     }
 
-    // ✅ FIXED: Hapus gambar dari Cloudinary saat remove
+    // Hapus gambar dari Cloudinary saat remove
     async function removeImage() {
-        // Hapus dari Cloudinary
         if (formData.gambar && formData.gambar.includes('cloudinary.com')) {
             try {
                 await fetch('/tenant/produk/upload', {
@@ -236,6 +250,7 @@
         
         formData.gambar = '';
         previewUrl = '';
+        uploadSuccess = false;
         if (fileInput) fileInput.value = '';
     }
 
@@ -249,6 +264,12 @@
     }
 
     function handleSubmit() {
+        // ✅ v3: Cegah submit saat upload sedang berjalan
+        if (isUploading) {
+            alert('Tunggu upload gambar selesai terlebih dahulu!');
+            return;
+        }
+        
         isSubmitting = true;
         return async ({ result, update }) => {
             isSubmitting = false;
@@ -316,17 +337,28 @@
             <input type="hidden" name="variants" value={JSON.stringify(variants)} />
 
             <!-- Upload Gambar -->
-            <div class="flex justify-center py-6">
+            <div class="flex flex-col items-center py-6">
                 <div class="relative">
                     {#if previewUrl}
                         <img src={previewUrl} alt="Preview"
-                            class="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200" />
-                        <button type="button" on:click={removeImage}
-                            class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white 
-                                   rounded-full flex items-center justify-center
-                                   hover:bg-red-600 transition-colors shadow-lg">
-                            <X class="w-3.5 h-3.5" />
-                        </button>
+                            class="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200
+                                   {isUploading ? 'opacity-50' : ''}" />
+                        
+                        <!-- ✅ v3: Loading overlay saat upload -->
+                        {#if isUploading}
+                            <div class="absolute inset-0 flex items-center justify-center bg-white/60 rounded-2xl">
+                                <Loader2 class="w-8 h-8 animate-spin text-emerald-600" />
+                            </div>
+                        {/if}
+                        
+                        {#if !isUploading}
+                            <button type="button" on:click={removeImage}
+                                class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white 
+                                       rounded-full flex items-center justify-center
+                                       hover:bg-red-600 transition-colors shadow-lg">
+                                <X class="w-3.5 h-3.5" />
+                            </button>
+                        {/if}
                     {:else}
                         <div class="w-24 h-24 rounded-2xl bg-emerald-100 flex items-center 
                                     justify-center text-2xl font-bold text-emerald-600">
@@ -340,14 +372,33 @@
                     
                     <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
                         on:change={handleFileSelect} bind:this={fileInput}
-                        class="hidden" id="gambar-input-produk" />
-                    <label for="gambar-input-produk"
-                        class="absolute -bottom-1 -right-1 w-8 h-8 bg-white border-2 border-slate-200
-                               rounded-full flex items-center justify-center cursor-pointer
-                               hover:bg-slate-50 transition-colors shadow-sm">
-                        <Camera class="w-4 h-4 text-slate-500" />
-                    </label>
+                        class="hidden" id="gambar-input-produk"
+                        disabled={isUploading} />
+                    
+                    {#if !isUploading}
+                        <label for="gambar-input-produk"
+                            class="absolute -bottom-1 -right-1 w-8 h-8 bg-white border-2 border-slate-200
+                                   rounded-full flex items-center justify-center cursor-pointer
+                                   hover:bg-slate-50 transition-colors shadow-sm">
+                            <Camera class="w-4 h-4 text-slate-500" />
+                        </label>
+                    {/if}
                 </div>
+
+                <!-- ✅ v3: Upload status messages -->
+                {#if isUploading}
+                    <div class="mt-3 flex items-center gap-2 text-amber-600" transition:fade={{ duration: 150 }}>
+                        <Loader2 class="w-4 h-4 animate-spin" />
+                        <span class="text-xs font-medium">Sedang mengupload gambar... Tunggu sebentar.</span>
+                    </div>
+                {/if}
+                
+                {#if uploadSuccess}
+                    <div class="mt-3 flex items-center gap-2 text-emerald-600" transition:fade={{ duration: 150 }}>
+                        <CheckCircle class="w-4 h-4" />
+                        <span class="text-xs font-medium">Gambar berhasil diupload!</span>
+                    </div>
+                {/if}
             </div>
 
             {#if uploadError}
@@ -556,19 +607,31 @@
 
             <div class="h-24"></div>
 
-            <!-- Footer -->
+            <!-- ✅ v3: Footer dengan upload-aware button -->
             <div class="fixed bottom-0 left-0 right-0 sm:absolute sm:bottom-0 sm:left-0 sm:right-0
                         p-4 bg-white border-t border-slate-200 sm:rounded-b-2xl z-10">
-                <button type="submit"
-                    disabled={isSubmitting || !formData.nama_produk || formData.harga_jual <= 0}
-                    class="w-full h-12 bg-emerald-600 text-white rounded-xl font-semibold
-                           hover:bg-emerald-700 transition-colors disabled:opacity-50 
-                           disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                    {#if isSubmitting}
+                
+                {#if isUploading}
+                    <!-- ✅ v3: Tombol kuning saat upload berjalan -->
+                    <button type="button" disabled
+                        class="w-full h-12 bg-amber-500 text-white rounded-xl font-semibold
+                               cursor-not-allowed flex items-center justify-center gap-2 opacity-90">
                         <Loader2 class="w-5 h-5 animate-spin" />
-                    {/if}
-                    <span>Simpan</span>
-                </button>
+                        <span>Tunggu Upload Selesai...</span>
+                    </button>
+                {:else}
+                    <!-- Tombol normal -->
+                    <button type="submit"
+                        disabled={!canSubmit}
+                        class="w-full h-12 bg-emerald-600 text-white rounded-xl font-semibold
+                               hover:bg-emerald-700 transition-colors disabled:opacity-50 
+                               disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        {#if isSubmitting}
+                            <Loader2 class="w-5 h-5 animate-spin" />
+                        {/if}
+                        <span>{mode === 'add' ? 'Simpan Produk' : 'Simpan Perubahan'}</span>
+                    </button>
+                {/if}
             </div>
         </form>
     </div>
