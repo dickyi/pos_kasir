@@ -1,17 +1,16 @@
 <!--
-    VariantFormModal.svelte - Modal Form Varian Produk (FIXED v2)
+    VariantFormModal.svelte - Modal Form Varian Produk (FIXED v3)
     ============================================
-    ✅ FIX v2: Upload gambar varian ke Cloudinary
-    - Kirim old_image_url saat ganti gambar (hapus yang lama)
-    - Kirim type='variant' untuk folder terpisah
-    - Hapus gambar dari Cloudinary saat remove
+    ✅ FIX v3: Tombol Simpan disabled saat upload berlangsung
+    ✅ FIX v3: Gambar lama dihapus dari Cloudinary saat ganti
+    ✅ FIX v3: Upload status jelas (loading, success, error)
 -->
 <script>
     import { createEventDispatcher } from 'svelte';
     import { fly, fade, slide } from 'svelte/transition';
     import { 
         X, ChevronRight, Barcode, AlertCircle, Plus, Trash2,
-        Camera, Loader2, Image as ImageIcon, Weight, Tag
+        Camera, Loader2, Image as ImageIcon, Weight, Tag, CheckCircle
     } from 'lucide-svelte';
 
     const dispatch = createEventDispatcher();
@@ -36,19 +35,18 @@
     let formBerat = null;
     let formAtribut = [];
 
-    // Display values
     let displayHargaJual = '';
     let displayHargaModal = '';
 
-    // Toggle sections
     let showHargaModal = false;
     let showStok = true;
     let showAtribut = false;
     let showGambarBerat = false;
 
-    // Upload state
+    // ✅ Upload state - diperbaiki
     let isUploading = false;
     let uploadError = '';
+    let uploadSuccess = false;
     let previewUrl = '';
     let fileInput;
 
@@ -129,7 +127,7 @@
     }
 
     // ============================================
-    // ✅ FIXED: Upload gambar varian ke Cloudinary
+    // ✅ FIXED v3: Upload gambar dengan state management yang benar
     // ============================================
     async function handleFileSelect(event) {
         const file = event.target.files?.[0];
@@ -147,22 +145,23 @@
         }
 
         uploadError = '';
-        isUploading = true;
+        uploadSuccess = false;
+        isUploading = true; // ✅ Mulai upload - tombol Simpan akan disabled
 
         try {
-            // Preview langsung
+            // Preview langsung dari file lokal
             const reader = new FileReader();
             reader.onload = (e) => {
                 previewUrl = e.target.result;
             };
             reader.readAsDataURL(file);
 
-            // ✅ Upload ke Cloudinary via backend
+            // Upload ke Cloudinary via backend
             const uploadData = new FormData();
             uploadData.append('file', file);
-            uploadData.append('type', 'variant'); // ✅ Folder terpisah untuk varian
+            uploadData.append('type', 'variant');
 
-            // ✅ Kirim URL gambar lama agar dihapus dari Cloudinary
+            // Kirim URL gambar lama agar dihapus
             if (formGambar && formGambar.includes('cloudinary.com')) {
                 uploadData.append('old_image_url', formGambar);
             }
@@ -175,25 +174,28 @@
             const result = await response.json();
 
             if (result.success) {
-                formGambar = result.data.url;
+                formGambar = result.data.url;  // ✅ URL Cloudinary tersimpan
                 previewUrl = result.data.url;
+                uploadSuccess = true;
                 console.log('✅ Variant image uploaded:', result.data.url);
+                
+                // Auto-hide success message after 2 seconds
+                setTimeout(() => { uploadSuccess = false; }, 2000);
             } else {
                 uploadError = result.error || 'Gagal upload gambar';
                 previewUrl = formGambar || '';
             }
         } catch (error) {
             console.error('Upload error:', error);
-            uploadError = 'Gagal upload gambar';
+            uploadError = 'Gagal upload gambar. Coba lagi.';
             previewUrl = formGambar || '';
         } finally {
-            isUploading = false;
+            isUploading = false; // ✅ Selesai upload - tombol Simpan enabled kembali
         }
     }
 
-    // ✅ FIXED: Hapus gambar varian dari Cloudinary
+    // ✅ Hapus gambar dari Cloudinary
     async function removeImage() {
-        // Hapus dari Cloudinary jika URL Cloudinary
         if (formGambar && formGambar.includes('cloudinary.com')) {
             try {
                 await fetch('/tenant/produk/upload', {
@@ -209,11 +211,14 @@
         
         formGambar = '';
         previewUrl = '';
+        uploadSuccess = false;
+        uploadError = '';
         if (fileInput) fileInput.value = '';
     }
 
     function initForm() {
         uploadError = '';
+        uploadSuccess = false;
         
         if (mode === 'edit' && variant) {
             formId = variant.id || null;
@@ -272,7 +277,13 @@
         dispatch('close');
     }
 
+    // ✅ FIXED: Cek apakah upload sedang berjalan sebelum save
     function handleSave() {
+        if (isUploading) {
+            alert('Tunggu upload gambar selesai terlebih dahulu');
+            return;
+        }
+        
         if (!formNamaVarian.trim()) {
             alert('Nama varian wajib diisi');
             return;
@@ -308,6 +319,9 @@
 
     $: margin = formHargaJual - formHargaModal;
     $: marginPercent = formHargaModal > 0 ? ((margin / formHargaModal) * 100).toFixed(1) : 0;
+    
+    // ✅ Computed: apakah bisa simpan?
+    $: canSave = formNamaVarian.trim() && formHargaJual > 0 && !isUploading;
 </script>
 
 {#if open}
@@ -527,25 +541,36 @@
 
                 {#if showGambarBerat}
                     <div class="mt-4 space-y-4" transition:slide={{ duration: 150 }}>
-                        <!-- Upload Gambar Varian -->
                         <div class="space-y-2">
                             <label class="block text-sm font-medium text-slate-700">Gambar Varian</label>
                             <div class="flex items-center gap-4">
                                 <div class="relative">
                                     {#if previewUrl}
                                         <img src={previewUrl} alt="Preview"
-                                            class="w-20 h-20 rounded-xl object-cover border-2 border-slate-200" />
-                                        <button type="button" on:click={removeImage}
-                                            class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white 
-                                                   rounded-full flex items-center justify-center
-                                                   hover:bg-red-600 transition-colors shadow-lg">
-                                            <X class="w-3.5 h-3.5" />
-                                        </button>
+                                            class="w-20 h-20 rounded-xl object-cover border-2 
+                                                   {isUploading ? 'border-amber-400 opacity-60' : 'border-slate-200'}" />
+                                        
+                                        <!-- ✅ Loading overlay saat upload -->
+                                        {#if isUploading}
+                                            <div class="absolute inset-0 flex items-center justify-center bg-white/50 rounded-xl">
+                                                <Loader2 class="w-6 h-6 animate-spin text-emerald-600" />
+                                            </div>
+                                        {/if}
+                                        
+                                        <!-- ✅ Tombol hapus hanya muncul saat tidak upload -->
+                                        {#if !isUploading}
+                                            <button type="button" on:click={removeImage}
+                                                class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white 
+                                                       rounded-full flex items-center justify-center
+                                                       hover:bg-red-600 transition-colors shadow-lg">
+                                                <X class="w-3.5 h-3.5" />
+                                            </button>
+                                        {/if}
                                     {:else}
                                         <div class="w-20 h-20 rounded-xl bg-slate-100 flex items-center 
                                                     justify-center text-slate-400 border-2 border-dashed border-slate-300">
                                             {#if isUploading}
-                                                <Loader2 class="w-6 h-6 animate-spin" />
+                                                <Loader2 class="w-6 h-6 animate-spin text-emerald-600" />
                                             {:else}
                                                 <ImageIcon class="w-6 h-6" />
                                             {/if}
@@ -556,20 +581,43 @@
                                 <div class="flex-1">
                                     <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
                                         on:change={handleFileSelect} bind:this={fileInput}
-                                        class="hidden" id="gambar-varian-input" />
+                                        class="hidden" id="gambar-varian-input"
+                                        disabled={isUploading} />
                                     <label for="gambar-varian-input"
-                                        class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 
-                                               text-slate-700 rounded-lg cursor-pointer hover:bg-slate-200 
-                                               transition-colors text-sm font-medium">
-                                        <Camera class="w-4 h-4" />
-                                        <span>Pilih Gambar</span>
+                                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer 
+                                               transition-colors text-sm font-medium
+                                               {isUploading 
+                                                   ? 'bg-slate-50 text-slate-400 cursor-wait' 
+                                                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+                                        {#if isUploading}
+                                            <Loader2 class="w-4 h-4 animate-spin" />
+                                            <span>Mengupload...</span>
+                                        {:else}
+                                            <Camera class="w-4 h-4" />
+                                            <span>Pilih Gambar</span>
+                                        {/if}
                                     </label>
                                     <p class="text-xs text-slate-500 mt-1">JPG, PNG, WebP, GIF. Maks 10MB</p>
                                 </div>
                             </div>
 
+                            <!-- ✅ Upload status messages -->
+                            {#if isUploading}
+                                <div class="flex items-center gap-2 p-2 bg-amber-50 rounded-lg text-amber-600" transition:slide={{ duration: 150 }}>
+                                    <Loader2 class="w-4 h-4 animate-spin" />
+                                    <span class="text-xs">Sedang mengupload gambar... Tunggu sebentar.</span>
+                                </div>
+                            {/if}
+
+                            {#if uploadSuccess}
+                                <div class="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg text-emerald-600" transition:slide={{ duration: 150 }}>
+                                    <CheckCircle class="w-4 h-4" />
+                                    <span class="text-xs">Gambar berhasil diupload!</span>
+                                </div>
+                            {/if}
+
                             {#if uploadError}
-                                <div class="flex items-center gap-2 p-2 bg-red-50 rounded-lg text-red-600">
+                                <div class="flex items-center gap-2 p-2 bg-red-50 rounded-lg text-red-600" transition:slide={{ duration: 150 }}>
                                     <AlertCircle class="w-4 h-4" />
                                     <span class="text-xs">{uploadError}</span>
                                 </div>
@@ -609,13 +657,25 @@
             <div class="h-20"></div>
         </div>
 
-        <!-- Footer -->
+        <!-- ✅ FIXED: Footer dengan status upload -->
         <div class="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 rounded-b-2xl">
-            <button type="button" on:click={handleSave}
-                disabled={!formNamaVarian || formHargaJual <= 0}
-                class="w-full h-12 bg-emerald-600 text-white rounded-xl font-semibold
-                       hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                Simpan Varian
+            <button
+                type="button"
+                on:click={handleSave}
+                disabled={!canSave}
+                class="w-full h-12 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2
+                       {isUploading 
+                           ? 'bg-amber-500 text-white cursor-wait' 
+                           : canSave 
+                               ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                               : 'bg-slate-200 text-slate-400 cursor-not-allowed'}"
+            >
+                {#if isUploading}
+                    <Loader2 class="w-5 h-5 animate-spin" />
+                    <span>Tunggu Upload Selesai...</span>
+                {:else}
+                    <span>Simpan Varian</span>
+                {/if}
             </button>
         </div>
     </div>
